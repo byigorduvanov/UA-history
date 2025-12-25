@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Історичний спред - Діаграма</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        
+        .status-indicators {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .status {
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .status.online {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.offline {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .current-values {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .value-box {
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            min-width: 120px;
+        }
+        
+        .value-box.in {
+            background: #d1f2eb;
+            color: #0e6655;
+            border-left: 4px solid #1abc9c;
+        }
+        
+        .value-box.out {
+            background: #fadbd8;
+            color: #922b21;
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .value-label {
+            font-size: 12px;
+            font-weight: 400;
+            opacity: 0.8;
+            margin-bottom: 4px;
+        }
+        
+        .value-number {
+            font-size: 20px;
+        }
+        
+        #chart {
+            width: 100%;
+            height: 600px;
+            margin-top: 20px;
+        }
+        
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e7f3ff;
+            border-radius: 6px;
+            border-left: 4px solid #2196F3;
+            font-size: 14px;
+            color: #0d47a1;
+        }
+        
+        .info strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .analysis-results {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .analysis-results h2 {
+            color: #333;
+            font-size: 20px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .method-section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: white;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .method-section h3 {
+            color: #667eea;
+            font-size: 16px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .method-section .method-icon {
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+            border-radius: 3px;
+        }
+        
+        .method-section.histogram .method-icon {
+            background: #3498db;
+        }
+        
+        .method-section.mode .method-icon {
+            background: #e67e22;
+        }
+        
+        .method-section.kde .method-icon {
+            background: #9b59b6;
+        }
+        
+        .method-section.clustering .method-icon {
+            background: #27ae60;
+        }
+        
+        .method-section.quantiles .method-icon {
+            background: #8b4513;
+        }
+        
+        .result-item {
+            margin: 8px 0;
+            padding: 8px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .result-item strong {
+            color: #555;
+            margin-right: 8px;
+        }
+        
+        .result-item .value {
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .result-list {
+            list-style: none;
+            padding: 0;
+            margin: 8px 0;
+        }
+        
+        .result-list li {
+            padding: 6px 10px;
+            margin: 4px 0;
+            background: #f0f0f0;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        
+        .new-request-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: inline-block;
+            font-size: 14px;
+        }
+        
+        .new-request-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .header-row h1 {
+            margin: 0;
+        }
+        
+        @media (max-width: 640px) {
+            .header-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .new-request-btn {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-row">
+            <h1>Історичний спред - Візуалізація</h1>
+            <a href="/" class="new-request-btn">🔄 Новий запит</a>
+        </div>
+        
+        <div class="status-indicators">
+            {% if left_status %}
+            <div class="status {{ 'online' if left_status == 'online' else 'offline' }}">
+                {{ left_exchange }}: {{ left_status }}
+            </div>
+            {% endif %}
+            {% if right_status %}
+            <div class="status {{ 'online' if right_status == 'online' else 'offline' }}">
+                {{ right_exchange }}: {{ right_status }}
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="current-values">
+            {% if current_in is not none %}
+            <div class="value-box in">
+                <div class="value-label">In</div>
+                <div class="value-number">{{ "%.2f"|format(current_in) }}</div>
+            </div>
+            {% endif %}
+            {% if current_out is not none %}
+            <div class="value-box out">
+                <div class="value-label">Out</div>
+                <div class="value-number">{{ "%.2f"|format(current_out) }}</div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div id="chart"></div>
+        
+        <div class="info">
+            <strong>Інформація:</strong>
+            Загальна кількість точок: {{ total_points }} | 
+            Діапазон: {{ time_range }}
+            {% if error %}
+            <br><span style="color: #d32f2f; font-weight: bold;">Помилка: {{ error }}</span>
+            {% endif %}
+        </div>
+        
+        <div class="analysis-results">
+            <h2>📊 Результати аналізу найчастіших значень спреду виходу (Out)</h2>
+            
+            {% if not out_analysis or (not out_analysis.histogram.most_frequent_bin and out_analysis["mode"]["value"] is none and (not out_analysis.kde.peaks or out_analysis.kde.peaks|length == 0) and (not out_analysis.clustering.clusters or out_analysis.clustering.clusters|length == 0) and out_analysis.quantiles.median is none) %}
+            <div class="method-section" style="border-left-color: #999;">
+                <p style="color: #666; margin: 0;">Немає даних для аналізу або недостатньо точок для обчислення статистики.</p>
+            </div>
+            {% else %}
+            
+            <!-- Середнє значення з усіх методик -->
+            {% if average_from_methods and average_from_methods.average is not none %}
+            <div class="method-section" style="border-left-color: #667eea; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-left-width: 5px;">
+                <h3 style="color: #667eea; font-size: 18px;">
+                    ⭐ Середнє значення з усіх методик
+                </h3>
+                <div class="result-item" style="background: white; padding: 15px; border-radius: 6px; margin: 10px 0;">
+                    <div style="font-size: 24px; font-weight: bold; color: #667eea; margin-bottom: 10px;">
+                        {{ "%.4f"|format(average_from_methods.average) }}
+                    </div>
+                    <div class="result-item" style="background: transparent; padding: 5px 0;">
+                        <strong>Кількість методик, що враховано:</strong>
+                        <span class="value">{{ average_from_methods.count }}</span>
+                    </div>
+                    <div class="result-item" style="background: transparent; padding: 5px 0;">
+                        <strong>Методики:</strong>
+                        <span class="value">{{ average_from_methods.method_names|join(", ") }}</span>
+                    </div>
+                    {% if average_from_methods["values"]|length > 0 %}
+                    <div class="result-item" style="background: transparent; padding: 5px 0;">
+                        <strong>Значення з кожної методики:</strong>
+                        <ul class="result-list" style="margin-top: 8px;">
+                            {% for i in range(average_from_methods["values"]|length) %}
+                            <li>
+                                <strong>{{ average_from_methods.method_names[i] }}:</strong> 
+                                <span class="value">{{ "%.4f"|format(average_from_methods["values"][i]) }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    {% if average_from_methods.min is not none and average_from_methods.max is not none %}
+                    <div class="result-item" style="background: transparent; padding: 5px 0;">
+                        <strong>Діапазон значень:</strong>
+                        <span class="value">[{{ "%.4f"|format(average_from_methods.min) }}, {{ "%.4f"|format(average_from_methods.max) }}]</span>
+                    </div>
+                    {% endif %}
+                    {% if average_from_methods.std is not none and average_from_methods.std > 0 %}
+                    <div class="result-item" style="background: transparent; padding: 5px 0;">
+                        <strong>Стандартне відхилення:</strong>
+                        <span class="value">{{ "%.4f"|format(average_from_methods.std) }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
+            
+            <!-- Гістограма -->
+            {% if out_analysis.histogram.most_frequent_bin %}
+            <div class="method-section histogram">
+                <h3>
+                    <span class="method-icon"></span>
+                    Гістограма (бінінг)
+                </h3>
+                <div class="result-item">
+                    <strong>Найчастіший діапазон:</strong>
+                    <span class="value">{{ "%.4f"|format(out_analysis.histogram.most_frequent_bin[0]) }} - {{ "%.4f"|format(out_analysis.histogram.most_frequent_bin[1]) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Центр діапазону:</strong>
+                    <span class="value">{{ "%.4f"|format((out_analysis.histogram.most_frequent_bin[0] + out_analysis.histogram.most_frequent_bin[1]) / 2) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Частота (кількість точок):</strong>
+                    <span class="value">{{ out_analysis.histogram.frequency }}</span>
+                </div>
+                {% if out_analysis.histogram.bin_edges and out_analysis.histogram.bin_edges|length > 1 %}
+                <div class="result-item">
+                    <strong>Кількість бінів:</strong>
+                    <span class="value">{{ out_analysis.histogram.bin_edges|length - 1 }}</span>
+                </div>
+                {% endif %}
+                {% if out_analysis.histogram.top_bins and out_analysis.histogram.top_bins|length > 0 %}
+                <div class="result-item">
+                    <strong>Топ-5 найчастіших діапазонів:</strong>
+                    <ul class="result-list">
+                        {% for bin_info in out_analysis.histogram.top_bins %}
+                        <li>
+                            <strong>#{{ loop.index }}:</strong>
+                            Діапазон = [{{ "%.4f"|format(bin_info.bin[0]) }}, {{ "%.4f"|format(bin_info.bin[1]) }}],
+                            Центр = <span class="value">{{ "%.4f"|format(bin_info.center) }}</span>,
+                            Частота = {{ bin_info.frequency }} ({{ "%.2f"|format((bin_info.frequency / total_points * 100) if total_points > 0 else 0) }}%)
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            
+            <!-- Мода -->
+            {% if out_analysis["mode"]["value"] is not none %}
+            <div class="method-section mode">
+                <h3>
+                    <span class="method-icon"></span>
+                    Мода (найчастіше точне значення)
+                </h3>
+                <div class="result-item">
+                    <strong>Значення моди:</strong>
+                    <span class="value">{{ "%.4f"|format(out_analysis["mode"]["value"]) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Частота (кількість входжень):</strong>
+                    <span class="value">{{ out_analysis["mode"]["frequency"] }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Відсоток від загальної кількості:</strong>
+                    <span class="value">{{ "%.2f"|format((out_analysis["mode"]["frequency"] / total_points * 100) if total_points > 0 else 0) }}%</span>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- KDE -->
+            {% if out_analysis.kde.peaks and out_analysis.kde.peaks|length > 0 %}
+            <div class="method-section kde">
+                <h3>
+                    <span class="method-icon"></span>
+                    KDE (Kernel Density Estimation) - Піки щільності
+                </h3>
+                <div class="result-item">
+                    <strong>Знайдено піків:</strong>
+                    <span class="value">{{ out_analysis.kde.peaks|length }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Топ піки (найвищі значення щільності):</strong>
+                    <ul class="result-list">
+                        {% for peak in out_analysis.kde.peaks %}
+                        <li>
+                            <strong>Пік {{ loop.index }}:</strong> 
+                            Значення = <span class="value">{{ "%.4f"|format(peak) }}</span>
+                            {% if out_analysis.kde.peak_values and loop.index0 < out_analysis.kde.peak_values|length %}
+                            , Щільність = {{ "%.4f"|format(out_analysis.kde.peak_values[loop.index0]) }}
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Кластеризація -->
+            {% if out_analysis.clustering.clusters and out_analysis.clustering.clusters|length > 0 %}
+            <div class="method-section clustering">
+                <h3>
+                    <span class="method-icon"></span>
+                    Кластеризація ({{ out_analysis.clustering.method|upper if out_analysis.clustering.method else "K-means" }})
+                </h3>
+                <div class="result-item">
+                    <strong>Знайдено кластерів:</strong>
+                    <span class="value">{{ out_analysis.clustering.clusters|length }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Деталі кластерів (відсортовані за кількістю точок):</strong>
+                    <ul class="result-list">
+                        {% for cluster in out_analysis.clustering.clusters %}
+                        <li>
+                            <strong>Кластер {{ loop.index }}:</strong>
+                            Центр = <span class="value">{{ "%.4f"|format(cluster.center) }}</span>,
+                            Діапазон = [{{ "%.4f"|format(cluster.range[0]) }}, {{ "%.4f"|format(cluster.range[1]) }}],
+                            Точок = {{ cluster.points }} ({{ "%.2f"|format((cluster.points / total_points * 100) if total_points > 0 else 0) }}%)
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Квантилі -->
+            {% if out_analysis.quantiles.median is not none %}
+            <div class="method-section quantiles">
+                <h3>
+                    <span class="method-icon"></span>
+                    Квантилі та медіана
+                </h3>
+                <div class="result-item">
+                    <strong>Медіана (Q2, 50-й перцентиль):</strong>
+                    <span class="value">{{ "%.4f"|format(out_analysis.quantiles.median) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Q1 (25-й перцентиль):</strong>
+                    <span class="value">{{ "%.4f"|format(out_analysis.quantiles.q1) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Q3 (75-й перцентиль):</strong>
+                    <span class="value">{{ "%.4f"|format(out_analysis.quantiles.q3) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Інтерквартильний діапазон (IQR = Q3 - Q1):</strong>
+                    <span class="value">{{ "%.4f"|format(out_analysis.quantiles.iqr) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Діапазон Q1-Q3:</strong>
+                    <span class="value">[{{ "%.4f"|format(out_analysis.quantiles.q1) }}, {{ "%.4f"|format(out_analysis.quantiles.q3) }}]</span>
+                    <br><small style="color: #666;">Це діапазон, в якому знаходиться 50% всіх значень</small>
+                </div>
+            </div>
+            {% endif %}
+            
+        </div>
+    </div>
+    
+    <script>
+        var data = [
+            {
+                x: {{ timestamps|tojson }},
+                y: {{ in_values|tojson }},
+                type: 'scatter',
+                mode: 'lines',
+                name: 'In',
+                line: {
+                    color: '#1abc9c',
+                    width: 2
+                },
+                hovertemplate: '<b>In</b><br>Час: %{x}<br>Значення: %{y:.4f}<extra></extra>'
+            },
+            {
+                x: {{ timestamps|tojson }},
+                y: {{ out_values|tojson }},
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Out',
+                line: {
+                    color: '#e74c3c',
+                    width: 2
+                },
+                hovertemplate: '<b>Out</b><br>Час: %{x}<br>Значення: %{y:.4f}<extra></extra>'
+            }
+        ];
+        
+        {% if current_in is not none and last_timestamp %}
+        data.push({
+            x: [{{ last_timestamp|tojson }}, {{ last_timestamp|tojson }}],
+            y: [{{ current_in|tojson }}, {{ current_in|tojson }}],
+            type: 'scatter',
+            mode: 'lines',
+            name: 'In (поточне)',
+            line: {
+                color: '#1abc9c',
+                width: 1,
+                dash: 'dash'
+            },
+            showlegend: false,
+            hovertemplate: '<b>In (поточне)</b><br>Значення: %{y:.4f}<extra></extra>'
+        });
+        {% endif %}
+        
+        {% if current_out is not none and last_timestamp %}
+        data.push({
+            x: [{{ last_timestamp|tojson }}, {{ last_timestamp|tojson }}],
+            y: [{{ current_out|tojson }}, {{ current_out|tojson }}],
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Out (поточне)',
+            line: {
+                color: '#e74c3c',
+                width: 1,
+                dash: 'dash'
+            },
+            showlegend: false,
+            hovertemplate: '<b>Out (поточне)</b><br>Значення: %{y:.4f}<extra></extra>'
+        });
+        {% endif %}
+        
+        // Додаємо дані аналізу найчастіших значень out
+        var outAnalysis = {{ out_analysis|tojson }};
+        var shapes = [];
+        var annotations = [];
+        
+        // 1. Density plot (KDE) - відображаємо як вертикальну лінію на початку графіку
+        {% if out_analysis.kde.density_x and out_analysis.kde.density_x|length > 0 %}
+        var kdeX = {{ out_analysis.kde.density_x|tojson }};
+        var kdeY = {{ out_analysis.kde.density_y|tojson }};
+        var timestamps = {{ timestamps|tojson }};
+        var firstTimestamp = timestamps[0];
+        
+        // Нормалізуємо щільність для візуалізації
+        var maxDensity = Math.max(...kdeY);
+        var minY = Math.min(...{{ out_values|tojson }});
+        var maxY = Math.max(...{{ out_values|tojson }});
+        var yRange = maxY - minY;
+        
+        // Створюємо точки для density plot - значення по Y, час по X (фіксований на початку)
+        // Масштабуємо ширину density plot до 5% від діапазону часу
+        var timeRange = new Date(timestamps[timestamps.length - 1]) - new Date(firstTimestamp);
+        var densityWidth = timeRange * 0.05;
+        var scaledDensityX = [];
+        var scaledDensityY = [];
+        
+        for (var i = 0; i < kdeX.length; i++) {
+            // X позиція залежить від нормалізованої щільності
+            var densityRatio = kdeY[i] / maxDensity;
+            var xPos = new Date(firstTimestamp).getTime() + densityWidth * densityRatio;
+            scaledDensityX.push(new Date(xPos).toISOString());
+            scaledDensityY.push(kdeX[i]);
+        }
+        
+        data.push({
+            x: scaledDensityX,
+            y: scaledDensityY,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'KDE (щільність)',
+            line: {
+                color: '#9b59b6',
+                width: 2,
+                dash: 'dot'
+            },
+            fill: 'tozeroy',
+            fillcolor: 'rgba(155, 89, 182, 0.1)',
+            hovertemplate: '<b>KDE</b><br>Значення: %{y:.4f}<br>Щільність: %{customdata:.4f}<extra></extra>',
+            customdata: kdeY
+        });
+        {% endif %}
+        
+        // 2. Горизонтальні лінії для найчастіших значень
+        // Гістограма - найчастіший бін
+        {% if out_analysis.histogram.most_frequent_bin %}
+        var histBin = {{ out_analysis.histogram.most_frequent_bin|tojson }};
+        var histCenter = (histBin[0] + histBin[1]) / 2;
+        shapes.push({
+            type: 'line',
+            x0: {{ timestamps|tojson }}[0],
+            x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y0: histCenter,
+            y1: histCenter,
+            line: {
+                color: '#3498db',
+                width: 2,
+                dash: 'dash'
+            }
+        });
+        annotations.push({
+            x: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y: histCenter,
+            text: 'Гістограма: ' + histCenter.toFixed(4),
+            showarrow: true,
+            arrowhead: 2,
+            arrowcolor: '#3498db',
+            bgcolor: 'rgba(52, 152, 219, 0.8)',
+            bordercolor: '#3498db',
+            font: { color: 'white', size: 10 }
+        });
+        {% endif %}
+        
+        // Мода
+        {% if out_analysis["mode"]["value"] is not none %}
+        var modeValue = {{ out_analysis["mode"]["value"]|tojson }};
+        shapes.push({
+            type: 'line',
+            x0: {{ timestamps|tojson }}[0],
+            x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y0: modeValue,
+            y1: modeValue,
+            line: {
+                color: '#e67e22',
+                width: 2,
+                dash: 'dash'
+            }
+        });
+        annotations.push({
+            x: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y: modeValue,
+            text: 'Мода: ' + modeValue.toFixed(4),
+            showarrow: true,
+            arrowhead: 2,
+            arrowcolor: '#e67e22',
+            bgcolor: 'rgba(230, 126, 34, 0.8)',
+            bordercolor: '#e67e22',
+            font: { color: 'white', size: 10 }
+        });
+        {% endif %}
+        
+        // Квантилі - медіана, Q1, Q3
+        {% if out_analysis.quantiles.median is not none %}
+        var median = {{ out_analysis.quantiles.median|tojson }};
+        var q1 = {{ out_analysis.quantiles.q1|tojson }};
+        var q3 = {{ out_analysis.quantiles.q3|tojson }};
+        
+        // Медіана
+        shapes.push({
+            type: 'line',
+            x0: {{ timestamps|tojson }}[0],
+            x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y0: median,
+            y1: median,
+            line: {
+                color: '#8b4513',
+                width: 2,
+                dash: 'dot'
+            }
+        });
+        
+        // Q1 та Q3 - вертикальні смуги
+        shapes.push({
+            type: 'rect',
+            x0: {{ timestamps|tojson }}[0],
+            x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y0: q1,
+            y1: q3,
+            fillcolor: 'rgba(139, 69, 19, 0.1)',
+            line: {
+                color: '#8b4513',
+                width: 1,
+                dash: 'dot'
+            }
+        });
+        
+        annotations.push({
+            x: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y: median,
+            text: 'Медіана: ' + median.toFixed(4),
+            showarrow: true,
+            arrowhead: 2,
+            arrowcolor: '#8b4513',
+            bgcolor: 'rgba(139, 69, 19, 0.8)',
+            bordercolor: '#8b4513',
+            font: { color: 'white', size: 10 }
+        });
+        {% endif %}
+        
+        // KDE піки
+        {% if out_analysis.kde.peaks and out_analysis.kde.peaks|length > 0 %}
+        var kdePeaks = {{ out_analysis.kde.peaks|tojson }};
+        // Додаємо маркери для топ-3 піків
+        var topPeaks = kdePeaks.slice(0, Math.min(3, kdePeaks.length));
+        topPeaks.forEach(function(peak, index) {
+            shapes.push({
+                type: 'line',
+                x0: {{ timestamps|tojson }}[0],
+                x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+                y0: peak,
+                y1: peak,
+                line: {
+                    color: '#9b59b6',
+                    width: 1.5,
+                    dash: 'dot'
+                }
+            });
+        });
+        {% endif %}
+        
+        // Загальне середнє значення з усіх методик
+        {% if average_from_methods and average_from_methods.average is not none %}
+        var overallAvg = {{ average_from_methods.average|tojson }};
+        shapes.push({
+            type: 'line',
+            x0: {{ timestamps|tojson }}[0],
+            x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y0: overallAvg,
+            y1: overallAvg,
+            line: {
+                color: '#667eea',
+                width: 3,
+                dash: 'solid'
+            }
+        });
+        annotations.push({
+            x: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y: overallAvg,
+            text: 'Середнє: ' + overallAvg.toFixed(4),
+            showarrow: true,
+            arrowhead: 2,
+            arrowcolor: '#667eea',
+            bgcolor: 'rgba(102, 126, 234, 0.9)',
+            bordercolor: '#667eea',
+            font: { color: 'white', size: 11, weight: 'bold' }
+        });
+        {% endif %}
+        
+        // Кластеризація - центри кластерів
+        {% if out_analysis.clustering.clusters and out_analysis.clustering.clusters|length > 0 %}
+        var clusters = {{ out_analysis.clustering.clusters|tojson }};
+        // Додаємо маркери для топ-3 кластерів
+        var topClusters = clusters.slice(0, Math.min(3, clusters.length));
+        topClusters.forEach(function(cluster, index) {
+            // Горизонтальна лінія для центру кластера
+            shapes.push({
+                type: 'line',
+                x0: {{ timestamps|tojson }}[0],
+                x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+                y0: cluster.center,
+                y1: cluster.center,
+                line: {
+                    color: '#27ae60',
+                    width: 1.5,
+                    dash: 'dot'
+                }
+            });
+            
+            // Вертикальна смуга для діапазону кластера
+            shapes.push({
+                type: 'rect',
+                x0: {{ timestamps|tojson }}[0],
+                x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+                y0: cluster.range[0],
+                y1: cluster.range[1],
+                fillcolor: 'rgba(39, 174, 96, 0.05)',
+                line: {
+                    color: '#27ae60',
+                    width: 1,
+                    dash: 'dot'
+                }
+            });
+        });
+        {% endif %}
+        
+        // 3. Маркери для найчастіших значень
+        var markerData = [];
+        
+        // Гістограма - центр найчастішого біну
+        {% if out_analysis.histogram.most_frequent_bin %}
+        var histBinMarker = {{ out_analysis.histogram.most_frequent_bin|tojson }};
+        var histCenter = (histBinMarker[0] + histBinMarker[1]) / 2;
+        markerData.push({
+            x: [{{ timestamps|tojson }}[Math.floor({{ timestamps|length }} / 2)]],
+            y: [histCenter],
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Гістограма',
+            marker: {
+                color: '#3498db',
+                size: 12,
+                symbol: 'diamond'
+            },
+            hovertemplate: '<b>Гістограма</b><br>Значення: %{y:.4f}<br>Частота: {{ out_analysis.histogram.frequency }}<extra></extra>'
+        });
+        {% endif %}
+        
+        // Мода
+        {% if out_analysis["mode"]["value"] is not none %}
+        var modeValueMarker = {{ out_analysis["mode"]["value"]|tojson }};
+        markerData.push({
+            x: [{{ timestamps|tojson }}[Math.floor({{ timestamps|length }} / 2)]],
+            y: [modeValueMarker],
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Мода',
+            marker: {
+                color: '#e67e22',
+                size: 12,
+                symbol: 'square'
+            },
+            hovertemplate: '<b>Мода</b><br>Значення: %{y:.4f}<br>Частота: {{ out_analysis["mode"]["frequency"] }}<extra></extra>'
+        });
+        {% endif %}
+        
+        // KDE піки
+        {% if out_analysis.kde.peaks and out_analysis.kde.peaks|length > 0 %}
+        var kdePeaks = {{ out_analysis.kde.peaks|tojson }};
+        var topKdePeaks = kdePeaks.slice(0, Math.min(3, kdePeaks.length));
+        markerData.push({
+            x: topKdePeaks.map(function() { return {{ timestamps|tojson }}[Math.floor({{ timestamps|length }} / 2)]; }),
+            y: topKdePeaks,
+            type: 'scatter',
+            mode: 'markers',
+            name: 'KDE піки',
+            marker: {
+                color: '#9b59b6',
+                size: 10,
+                symbol: 'circle'
+            },
+            hovertemplate: '<b>KDE пік</b><br>Значення: %{y:.4f}<extra></extra>'
+        });
+        {% endif %}
+        
+        // Кластеризація
+        {% if out_analysis.clustering.clusters and out_analysis.clustering.clusters|length > 0 %}
+        var clusters = {{ out_analysis.clustering.clusters|tojson }};
+        var topClusters = clusters.slice(0, Math.min(3, clusters.length));
+        markerData.push({
+            x: topClusters.map(function() { return {{ timestamps|tojson }}[Math.floor({{ timestamps|length }} / 2)]; }),
+            y: topClusters.map(function(c) { return c.center; }),
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Кластери',
+            marker: {
+                color: '#27ae60',
+                size: 10,
+                symbol: 'triangle-up'
+            },
+            hovertemplate: '<b>Кластер</b><br>Центр: %{y:.4f}<br>Точок: %{customdata}<extra></extra>',
+            customdata: topClusters.map(function(c) { return c.points; })
+        });
+        {% endif %}
+        
+        // Загальне середнє значення
+        {% if average_from_methods and average_from_methods.average is not none %}
+        var overallAvgMarker = {{ average_from_methods.average|tojson }};
+        markerData.push({
+            x: [{{ timestamps|tojson }}[Math.floor({{ timestamps|length }} / 2)]],
+            y: [overallAvgMarker],
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Середнє (всі методики)',
+            marker: {
+                color: '#667eea',
+                size: 15,
+                symbol: 'star',
+                line: {
+                    color: 'white',
+                    width: 2
+                }
+            },
+            hovertemplate: '<b>Середнє з усіх методик</b><br>Значення: %{y:.4f}<br>Обчислено з: {{ average_from_methods.count }} методик<extra></extra>'
+        });
+        {% endif %}
+        
+        // Додаємо маркери до data
+        markerData.forEach(function(marker) {
+            data.push(marker);
+        });
+        
+        // 4. Гістограма розподілу (відображаємо як вертикальні смуги)
+        {% if out_analysis.histogram.bin_edges and out_analysis.histogram.bin_edges|length > 1 %}
+        var histBins = {{ out_analysis.histogram.bin_edges|tojson }};
+        var histFreqs = {{ out_analysis.histogram.frequencies|tojson }};
+        var timestamps = {{ timestamps|tojson }};
+        var firstTimestamp = timestamps[0];
+        var lastTimestamp = timestamps[timestamps.length - 1];
+        
+        // Додаємо вертикальні смуги для кожного біну (пропорційно до частоти)
+        var maxFreq = Math.max(...histFreqs);
+        for (var i = 0; i < histBins.length - 1; i++) {
+            if (histFreqs[i] > 0) {
+                var binStart = histBins[i];
+                var binEnd = histBins[i + 1];
+                var freq = histFreqs[i];
+                var width = (new Date(lastTimestamp) - new Date(firstTimestamp)) * (freq / maxFreq) * 0.3;
+                var xPos = new Date(firstTimestamp).getTime() + (new Date(lastTimestamp) - new Date(firstTimestamp)) * 0.1;
+                
+                shapes.push({
+                    type: 'rect',
+                    x0: new Date(xPos).toISOString(),
+                    x1: new Date(xPos + width).toISOString(),
+                    y0: binStart,
+                    y1: binEnd,
+                    fillcolor: 'rgba(52, 152, 219, ' + (0.1 + freq / maxFreq * 0.2) + ')',
+                    line: {
+                        color: '#3498db',
+                        width: 1
+                    },
+                    layer: 'below'
+                });
+            }
+        }
+        {% endif %}
+        
+        var layout = {
+            title: {
+                text: 'Історичний спред - In та Out',
+                font: {
+                    size: 18,
+                    color: '#333'
+                }
+            },
+            xaxis: {
+                title: 'Час',
+                showgrid: true,
+                gridcolor: '#e0e0e0',
+                zeroline: false
+            },
+            yaxis: {
+                title: 'Значення спреду',
+                showgrid: true,
+                gridcolor: '#e0e0e0',
+                zeroline: true,
+                zerolinecolor: '#999',
+                zerolinewidth: 1
+            },
+            hovermode: 'x unified',
+            legend: {
+                x: 0,
+                y: 1,
+                bgcolor: 'rgba(255,255,255,0.8)',
+                bordercolor: '#ccc',
+                borderwidth: 1
+            },
+            plot_bgcolor: 'white',
+            paper_bgcolor: 'white',
+            margin: {
+                l: 60,
+                r: 30,
+                t: 60,
+                b: 60
+            },
+            shapes: shapes,
+            annotations: annotations
+        };
+        
+        var config = {
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+            toImageButtonOptions: {
+                format: 'png',
+                filename: 'spread_chart',
+                height: 600,
+                width: 1400,
+                scale: 1
+            }
+        };
+        
+        Plotly.newPlot('chart', data, layout, config);
+        
+        // Оновлення розміру при зміні вікна
+        window.addEventListener('resize', function() {
+            Plotly.Plots.resize('chart');
+        });
+    </script>
+</body>
+</html>
+
