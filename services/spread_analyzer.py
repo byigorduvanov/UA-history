@@ -330,43 +330,52 @@ def analyze_out_quantiles(spreads: List[SpreadPoint]) -> Dict[str, Any]:
     }
 
 
-def calculate_average_from_methods(out_analysis: Dict[str, Any]) -> Dict[str, Any]:
+def calculate_average_from_methods(
+    out_analysis: Dict[str, Any], 
+    enabled_methods: List[str] = None
+) -> Dict[str, Any]:
     """
-    Обчислює середнє значення з усіх методик аналізу.
+    Обчислює середнє значення з вибраних методик аналізу.
     
     Args:
         out_analysis: Словник з результатами аналізу
+        enabled_methods: Список назв методик для включення. 
+                         Якщо None, використовуються всі доступні методики.
+                         Можливі значення: "histogram", "mode", "kde", "clustering", "quantiles"
     
     Returns:
         Словник з середніми значеннями та деталями
     """
+    if enabled_methods is None:
+        enabled_methods = ["histogram", "mode", "kde", "clustering", "quantiles"]
+    
     values = []
     method_names = []
     
     # Гістограма - центр найчастішого біну
-    if out_analysis.get("histogram", {}).get("most_frequent_bin"):
+    if "histogram" in enabled_methods and out_analysis.get("histogram", {}).get("most_frequent_bin"):
         bin_range = out_analysis["histogram"]["most_frequent_bin"]
         center = (bin_range[0] + bin_range[1]) / 2
         values.append(center)
         method_names.append("Гістограма")
     
     # Мода
-    if out_analysis.get("mode", {}).get("value") is not None:
+    if "mode" in enabled_methods and out_analysis.get("mode", {}).get("value") is not None:
         values.append(out_analysis["mode"]["value"])
         method_names.append("Мода")
     
     # KDE - найвищий пік
-    if out_analysis.get("kde", {}).get("peaks") and len(out_analysis["kde"]["peaks"]) > 0:
+    if "kde" in enabled_methods and out_analysis.get("kde", {}).get("peaks") and len(out_analysis["kde"]["peaks"]) > 0:
         values.append(out_analysis["kde"]["peaks"][0])  # Найвищий пік
         method_names.append("KDE (найвищий пік)")
     
     # Кластеризація - центр найбільшого кластера
-    if out_analysis.get("clustering", {}).get("clusters") and len(out_analysis["clustering"]["clusters"]) > 0:
+    if "clustering" in enabled_methods and out_analysis.get("clustering", {}).get("clusters") and len(out_analysis["clustering"]["clusters"]) > 0:
         values.append(out_analysis["clustering"]["clusters"][0]["center"])  # Найбільший кластер
         method_names.append("Кластеризація")
     
     # Квантилі - медіана
-    if out_analysis.get("quantiles", {}).get("median") is not None:
+    if "quantiles" in enabled_methods and out_analysis.get("quantiles", {}).get("median") is not None:
         values.append(out_analysis["quantiles"]["median"])
         method_names.append("Медіана")
     
@@ -391,7 +400,28 @@ def calculate_average_from_methods(out_analysis: Dict[str, Any]) -> Dict[str, An
     }
 
 
-def prepare_chart_data(spreads: List[SpreadPoint]) -> Dict[str, Any]:
+def calculate_simple_mean(spreads: List[SpreadPoint]) -> float:
+    """
+    Обчислює просте середнє арифметичне всіх значень out.
+    
+    Args:
+        spreads: Список точок спреду
+    
+    Returns:
+        Середнє арифметичне значення out
+    """
+    if not spreads:
+        return 0.0
+    
+    out_values = [point.out for point in spreads]
+    return float(np.mean(out_values))
+
+
+def prepare_chart_data(
+    spreads: List[SpreadPoint],
+    avg_method: str = "methods",
+    enabled_methods: List[str] = None
+) -> Dict[str, Any]:
     """
     Підготовлює дані для відображення на графіку.
     
@@ -472,8 +502,49 @@ def prepare_chart_data(spreads: List[SpreadPoint]) -> Dict[str, Any]:
         "quantiles": analyze_out_quantiles(sorted_spreads)
     }
     
-    # Обчислюємо середнє значення з усіх методик
-    average_from_methods = calculate_average_from_methods(out_analysis)
+    # Обчислюємо середнє значення залежно від вибраного методу
+    simple_mean = calculate_simple_mean(sorted_spreads)
+    
+    if avg_method == "simple":
+        # Використовуємо просте середнє арифметичне
+        average_from_methods = {
+            "average": simple_mean,
+            "count": 1,
+            "values": [simple_mean],
+            "method_names": ["Просте середнє арифметичне"],
+            "min": simple_mean,
+            "max": simple_mean,
+            "std": 0.0
+        }
+    elif avg_method == "both":
+        # Обчислюємо середнє з методик та додаємо просте середнє
+        methods_avg = calculate_average_from_methods(out_analysis, enabled_methods)
+        if methods_avg["average"] is not None:
+            all_values = methods_avg["values"] + [simple_mean]
+            all_names = methods_avg["method_names"] + ["Просте середнє"]
+            average_from_methods = {
+                "average": float(np.mean(all_values)),
+                "count": len(all_values),
+                "values": all_values,
+                "method_names": all_names,
+                "min": float(np.min(all_values)),
+                "max": float(np.max(all_values)),
+                "std": float(np.std(all_values)) if len(all_values) > 1 else 0.0
+            }
+        else:
+            # Якщо методики не дали результат, використовуємо просте середнє
+            average_from_methods = {
+                "average": simple_mean,
+                "count": 1,
+                "values": [simple_mean],
+                "method_names": ["Просте середнє арифметичне"],
+                "min": simple_mean,
+                "max": simple_mean,
+                "std": 0.0
+            }
+    else:  # avg_method == "methods" (за замовчуванням)
+        # Використовуємо тільки методики
+        average_from_methods = calculate_average_from_methods(out_analysis, enabled_methods)
     
     return {
         "timestamps": timestamps,
@@ -485,6 +556,7 @@ def prepare_chart_data(spreads: List[SpreadPoint]) -> Dict[str, Any]:
         "total_points": len(spreads),
         "time_range": time_range,
         "out_analysis": out_analysis,
-        "average_from_methods": average_from_methods
+        "average_from_methods": average_from_methods,
+        "simple_mean": simple_mean
     }
 

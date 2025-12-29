@@ -239,6 +239,120 @@
             margin: 0;
         }
         
+        .settings-panel {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .settings-panel h2 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .settings-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .settings-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .settings-group label {
+            font-size: 13px;
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 5px;
+        }
+        
+        .settings-group input[type="number"],
+        .settings-group select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .settings-group input[type="number"]:focus,
+        .settings-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+        
+        .settings-checkboxes {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .settings-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .settings-checkbox-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .settings-checkbox-item label {
+            margin: 0;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        
+        .update-btn {
+            padding: 10px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+        
+        .update-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .update-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading-indicator {
+            display: none;
+            text-align: center;
+            padding: 10px;
+            color: #667eea;
+            font-weight: 500;
+        }
+        
+        .loading-indicator.show {
+            display: block;
+        }
+        
         @media (max-width: 640px) {
             .header-row {
                 flex-direction: column;
@@ -257,6 +371,67 @@
         <div class="header-row">
             <h1>Історичний спред - Візуалізація</h1>
             <a href="/" class="new-request-btn">🔄 Новий запит</a>
+        </div>
+        
+        <div class="settings-panel">
+            <h2>⚙️ Налаштування аналізу</h2>
+            <div class="settings-form" id="settingsForm">
+                <div class="settings-group">
+                    <label for="settings_limit">Кількість точок</label>
+                    <input 
+                        type="number" 
+                        id="settings_limit" 
+                        value="{{ limit|default(10000) }}"
+                        min="1"
+                        max="10000"
+                    >
+                </div>
+                
+                <div class="settings-group">
+                    <label for="settings_tolerance">Толерантність</label>
+                    <input 
+                        type="number" 
+                        id="settings_tolerance" 
+                        value="{{ tolerance|default(0.01) }}"
+                        step="0.001"
+                        min="0"
+                    >
+                </div>
+                
+                <div class="settings-group">
+                    <label for="settings_avg_method">Метод розрахунку середнього</label>
+                    <select id="settings_avg_method">
+                        <option value="simple" {% if avg_method|default('methods') == 'simple' %}selected{% endif %}>Просте середнє арифметичне</option>
+                        <option value="methods" {% if avg_method|default('methods') == 'methods' %}selected{% endif %}>Середнє з методик</option>
+                        <option value="both" {% if avg_method|default('methods') == 'both' %}selected{% endif %}>Обидва</option>
+                    </select>
+                </div>
+                
+                <div class="settings-checkboxes">
+                    <div class="settings-checkbox-item">
+                        <input type="checkbox" id="settings_use_histogram" {% if use_histogram|default('true') == 'true' %}checked{% endif %}>
+                        <label for="settings_use_histogram">Гістограма</label>
+                    </div>
+                    <div class="settings-checkbox-item">
+                        <input type="checkbox" id="settings_use_mode" {% if use_mode|default('true') == 'true' %}checked{% endif %}>
+                        <label for="settings_use_mode">Мода</label>
+                    </div>
+                    <div class="settings-checkbox-item">
+                        <input type="checkbox" id="settings_use_kde" {% if use_kde|default('true') == 'true' %}checked{% endif %}>
+                        <label for="settings_use_kde">KDE (найвищий пік)</label>
+                    </div>
+                    <div class="settings-checkbox-item">
+                        <input type="checkbox" id="settings_use_clustering" {% if use_clustering|default('true') == 'true' %}checked{% endif %}>
+                        <label for="settings_use_clustering">Кластеризація</label>
+                    </div>
+                    <div class="settings-checkbox-item">
+                        <input type="checkbox" id="settings_use_quantiles" {% if use_quantiles|default('true') == 'true' %}checked{% endif %}>
+                        <label for="settings_use_quantiles">Квантилі (медіана)</label>
+                    </div>
+                </div>
+            </div>
+            <button class="update-btn" id="updateBtn">🔄 Оновити</button>
+            <div class="loading-indicator" id="loadingIndicator">Завантаження...</div>
         </div>
         
         <div class="status-indicators">
@@ -307,11 +482,18 @@
             </div>
             {% else %}
             
-            <!-- Середнє значення з усіх методик -->
+            <!-- Середнє значення -->
             {% if average_from_methods and average_from_methods.average is not none %}
             <div class="method-section" style="border-left-color: #667eea; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-left-width: 5px;">
                 <h3 style="color: #667eea; font-size: 18px;">
-                    ⭐ Середнє значення з усіх методик
+                    ⭐ Середнє значення
+                    {% if average_from_methods.method_names|length == 1 and "Просте середнє" in average_from_methods.method_names[0] %}
+                        (просте арифметичне)
+                    {% elif "Просте середнє" in average_from_methods.method_names|join("") %}
+                        (комбіноване)
+                    {% else %}
+                        (з методик)
+                    {% endif %}
                 </h3>
                 <div class="result-item" style="background: white; padding: 15px; border-radius: 6px; margin: 10px 0;">
                     <div style="font-size: 24px; font-weight: bold; color: #667eea; margin-bottom: 10px;">
@@ -1017,6 +1199,341 @@
         window.addEventListener('resize', function() {
             Plotly.Plots.resize('chart');
         });
+        
+        // Зберігаємо поточний URL для AJAX запитів
+        var currentUrl = {{ url|tojson }};
+        var currentData = {
+            timestamps: {{ timestamps|tojson }},
+            in_values: {{ in_values|tojson }},
+            out_values: {{ out_values|tojson }},
+            current_in: {{ current_in|tojson }},
+            current_out: {{ current_out|tojson }},
+            total_points: {{ total_points }},
+            time_range: {{ time_range|tojson }},
+            out_analysis: {{ out_analysis|tojson }},
+            average_from_methods: {{ average_from_methods|tojson }}
+        };
+        
+        // Функція для оновлення графіка через AJAX
+        async function updateChart() {
+            const updateBtn = document.getElementById('updateBtn');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            
+            // Отримуємо значення з форми
+            const limit = parseInt(document.getElementById('settings_limit').value) || 10000;
+            const tolerance = parseFloat(document.getElementById('settings_tolerance').value) || 0.01;
+            const avgMethod = document.getElementById('settings_avg_method').value || 'methods';
+            const useHistogram = document.getElementById('settings_use_histogram').checked;
+            const useMode = document.getElementById('settings_use_mode').checked;
+            const useKde = document.getElementById('settings_use_kde').checked;
+            const useClustering = document.getElementById('settings_use_clustering').checked;
+            const useQuantiles = document.getElementById('settings_use_quantiles').checked;
+            
+            // Показуємо індикатор завантаження
+            updateBtn.disabled = true;
+            updateBtn.textContent = 'Оновлення...';
+            loadingIndicator.classList.add('show');
+            
+            try {
+                // Формуємо URL для AJAX запиту
+                const params = new URLSearchParams({
+                    url: currentUrl,
+                    limit: limit,
+                    tolerance: tolerance,
+                    format: 'json',
+                    avg_method: avgMethod,
+                    use_histogram: useHistogram ? 'true' : 'false',
+                    use_mode: useMode ? 'true' : 'false',
+                    use_kde: useKde ? 'true' : 'false',
+                    use_clustering: useClustering ? 'true' : 'false',
+                    use_quantiles: useQuantiles ? 'true' : 'false'
+                });
+                
+                const response = await fetch('/analyze?' + params.toString());
+                
+                if (!response.ok) {
+                    throw new Error('Помилка завантаження даних');
+                }
+                
+                const newData = await response.json();
+                
+                // Оновлюємо графік
+                updatePlotlyChart(newData);
+                
+                // Оновлюємо статистику
+                updateStatistics(newData);
+                
+                // Оновлюємо поточні значення
+                updateCurrentValues(newData);
+                
+                // Оновлюємо інформацію
+                updateInfo(newData);
+                
+                // Зберігаємо нові дані
+                currentData = newData;
+                
+            } catch (error) {
+                console.error('Помилка оновлення:', error);
+                alert('Помилка оновлення даних: ' + error.message);
+            } finally {
+                updateBtn.disabled = false;
+                updateBtn.textContent = '🔄 Оновити';
+                loadingIndicator.classList.remove('show');
+            }
+        }
+        
+        // Функція для створення даних графіка з нових даних
+        function createChartDataFromResponse(data) {
+            var chartData = [
+                {
+                    x: data.timestamps,
+                    y: data.in_values,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'In',
+                    line: {
+                        color: '#1abc9c',
+                        width: 2
+                    },
+                    hovertemplate: '<b>In</b><br>Час: %{x}<br>Значення: %{y:.4f}<extra></extra>'
+                },
+                {
+                    x: data.timestamps,
+                    y: data.out_values,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Out',
+                    line: {
+                        color: '#e74c3c',
+                        width: 2
+                    },
+                    hovertemplate: '<b>Out</b><br>Час: %{x}<br>Значення: %{y:.4f}<extra></extra>'
+                }
+            ];
+            
+            // Додаємо поточні значення
+            const lastTimestamp = data.timestamps && data.timestamps.length > 0 ? data.timestamps[data.timestamps.length - 1] : null;
+            if (data.current_in !== null && lastTimestamp) {
+                chartData.push({
+                    x: [lastTimestamp, lastTimestamp],
+                    y: [data.current_in, data.current_in],
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'In (поточне)',
+                    line: {
+                        color: '#1abc9c',
+                        width: 1,
+                        dash: 'dash'
+                    },
+                    showlegend: false,
+                    hovertemplate: '<b>In (поточне)</b><br>Значення: %{y:.4f}<extra></extra>'
+                });
+            }
+            
+            if (data.current_out !== null && lastTimestamp) {
+                chartData.push({
+                    x: [lastTimestamp, lastTimestamp],
+                    y: [data.current_out, data.current_out],
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Out (поточне)',
+                    line: {
+                        color: '#e74c3c',
+                        width: 1,
+                        dash: 'dash'
+                    },
+                    showlegend: false,
+                    hovertemplate: '<b>Out (поточне)</b><br>Значення: %{y:.4f}<extra></extra>'
+                });
+            }
+            
+            // Додаємо маркер для середнього значення
+            if (data.average_from_methods && data.average_from_methods.average !== null && lastTimestamp) {
+                const overallAvg = data.average_from_methods.average;
+                const midTimestamp = data.timestamps[Math.floor(data.timestamps.length / 2)];
+                chartData.push({
+                    x: [midTimestamp],
+                    y: [overallAvg],
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Середнє (всі методики)',
+                    marker: {
+                        color: '#667eea',
+                        size: 12,
+                        symbol: 'star'
+                    },
+                    hovertemplate: '<b>Середнє з усіх методик</b><br>Значення: %{y:.4f}<br>Обчислено з: ' + 
+                        data.average_from_methods.count + ' методик<extra></extra>'
+                });
+            }
+            
+            return chartData;
+        }
+        
+        // Функція для створення layout з нових даних
+        function createChartLayoutFromResponse(data) {
+            var shapes = [];
+            var annotations = [];
+            
+            // Додаємо лінію середнього значення
+            if (data.average_from_methods && data.average_from_methods.average !== null && data.timestamps && data.timestamps.length > 0) {
+                const overallAvg = data.average_from_methods.average;
+                const firstTimestamp = data.timestamps[0];
+                const lastTimestamp = data.timestamps[data.timestamps.length - 1];
+                
+                shapes.push({
+                    type: 'line',
+                    x0: firstTimestamp,
+                    x1: lastTimestamp,
+                    y0: overallAvg,
+                    y1: overallAvg,
+                    line: {
+                        color: '#667eea',
+                        width: 3,
+                        dash: 'solid'
+                    }
+                });
+                
+                annotations.push({
+                    x: lastTimestamp,
+                    y: overallAvg,
+                    text: 'Середнє: ' + overallAvg.toFixed(4),
+                    showarrow: true,
+                    arrowhead: 2,
+                    arrowsize: 1,
+                    arrowwidth: 2,
+                    arrowcolor: '#667eea',
+                    ax: 0,
+                    ay: -40,
+                    bgcolor: 'rgba(255,255,255,0.8)',
+                    bordercolor: '#667eea',
+                    borderwidth: 1,
+                    font: {
+                        color: '#667eea',
+                        size: 12
+                    }
+                });
+            }
+            
+            return {
+                title: {
+                    text: 'Історичний спред - In та Out',
+                    font: {
+                        size: 18,
+                        color: '#333'
+                    }
+                },
+                xaxis: {
+                    title: 'Час',
+                    showgrid: true,
+                    gridcolor: '#e0e0e0',
+                    zeroline: false
+                },
+                yaxis: {
+                    title: 'Значення спреду',
+                    showgrid: true,
+                    gridcolor: '#e0e0e0',
+                    zeroline: true,
+                    zerolinecolor: '#999',
+                    zerolinewidth: 1
+                },
+                hovermode: 'x unified',
+                legend: {
+                    x: 0,
+                    y: 1,
+                    bgcolor: 'rgba(255,255,255,0.8)',
+                    bordercolor: '#ccc',
+                    borderwidth: 1
+                },
+                plot_bgcolor: 'white',
+                paper_bgcolor: 'white',
+                margin: {
+                    l: 60,
+                    r: 30,
+                    t: 60,
+                    b: 60
+                },
+                shapes: shapes,
+                annotations: annotations
+            };
+        }
+        
+        // Функція для оновлення графіка Plotly
+        function updatePlotlyChart(data) {
+            const newData = createChartDataFromResponse(data);
+            const newLayout = createChartLayoutFromResponse(data);
+            
+            // Повністю перемальовуємо графік
+            Plotly.newPlot('chart', newData, newLayout, {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: 'spread_chart',
+                    height: 600,
+                    width: 1400,
+                    scale: 1
+                }
+            });
+        }
+        
+        // Функція для оновлення статистики
+        function updateStatistics(data) {
+            // Оновлюємо середнє значення
+            const avgSection = document.querySelector('.method-section');
+            if (avgSection && data.average_from_methods && data.average_from_methods.average !== null) {
+                const avgValueDiv = avgSection.querySelector('div[style*="font-size: 24px"]');
+                if (avgValueDiv) {
+                    avgValueDiv.textContent = data.average_from_methods.average.toFixed(4);
+                }
+                
+                // Оновлюємо кількість методик
+                const countSpan = avgSection.querySelector('.value');
+                if (countSpan && countSpan.textContent.trim() === String(currentData.average_from_methods.count)) {
+                    const countElements = avgSection.querySelectorAll('.value');
+                    if (countElements.length > 0) {
+                        countElements[0].textContent = data.average_from_methods.count;
+                    }
+                }
+                
+                // Оновлюємо список методик
+                const methodsSpan = avgSection.querySelectorAll('.value');
+                if (methodsSpan.length > 1) {
+                    methodsSpan[1].textContent = data.average_from_methods.method_names.join(', ');
+                }
+            }
+            
+            // Оновлюємо інші секції аналізу (гістограма, мода, KDE, тощо)
+            // Для повного оновлення можна використати перезавантаження сторінки або детальну перебудову DOM
+            // Зараз оновлюємо тільки основні елементи
+        }
+        
+        // Функція для оновлення поточних значень
+        function updateCurrentValues(data) {
+            const inBox = document.querySelector('.value-box.in .value-number');
+            const outBox = document.querySelector('.value-box.out .value-number');
+            
+            if (inBox && data.current_in !== null) {
+                inBox.textContent = data.current_in.toFixed(2);
+            }
+            if (outBox && data.current_out !== null) {
+                outBox.textContent = data.current_out.toFixed(2);
+            }
+        }
+        
+        // Функція для оновлення інформації
+        function updateInfo(data) {
+            const infoDiv = document.querySelector('.info');
+            if (infoDiv) {
+                infoDiv.innerHTML = '<strong>Інформація:</strong> Загальна кількість точок: ' + 
+                    data.total_points + ' | Діапазон: ' + data.time_range;
+            }
+        }
+        
+        // Додаємо обробник події для кнопки "Оновити"
+        document.getElementById('updateBtn').addEventListener('click', updateChart);
     </script>
 </body>
 </html>
