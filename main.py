@@ -216,12 +216,20 @@ async def analyze_spread(
                 "last_timestamp": "",
                 "total_points": 0,
                 "time_range": "Помилка завантаження даних",
+                "lookback_checks": {"hours": [2, 4, 8, 16], "abs_thresholds": [0.5, 1.0], "windows": {}},
                 "out_analysis": {
-                    "histogram": {},
-                    "kde": {},
-                    "mode": {},
-                    "clustering": {},
-                    "quantiles": {}
+                    "histogram": {"most_frequent_bin": None, "frequency": 0, "bins": [], "frequencies": [], "bin_edges": [], "top_bins": []},
+                    "kde": {"peaks": [], "peak_values": [], "density_x": [], "density_y": []},
+                    "mode": {"value": None, "frequency": 0},
+                    "clustering": {"clusters": []},
+                    "quantiles": {"median": None, "q1": None, "q3": None, "iqr": None}
+                },
+                "in_analysis": {
+                    "histogram": {"most_frequent_bin": None, "frequency": 0, "bins": [], "frequencies": [], "bin_edges": [], "top_bins": []},
+                    "kde": {"peaks": [], "peak_values": [], "density_x": [], "density_y": []},
+                    "mode": {"value": None, "frequency": 0},
+                    "clustering": {"clusters": []},
+                    "quantiles": {"median": None, "q1": None, "q3": None, "iqr": None}
                 },
                 "average_from_methods": {
                     "average": None,
@@ -229,6 +237,14 @@ async def analyze_spread(
                     "values": [],
                     "method_names": []
                 },
+                "average_in_from_methods": {
+                    "average": None,
+                    "count": 0,
+                    "values": [],
+                    "method_names": []
+                },
+                "simple_mean": 0.0,
+                "simple_mean_in": 0.0,
                 "left_exchange": "Left",
                 "right_exchange": "Right",
                 "left_status": "offline",

@@ -364,6 +364,72 @@
                 text-align: center;
             }
         }
+
+        /* Lookback (2/4/8/16 год) */
+        .lookback-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+        }
+
+        .lookback-card {
+            background: white;
+            border-radius: 6px;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .lookback-card h3 {
+            margin: 0 0 10px 0;
+            color: #0d47a1;
+            font-size: 16px;
+        }
+
+        .lookback-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+
+        .lookback-table th,
+        .lookback-table td {
+            border: 1px solid #e0e0e0;
+            padding: 6px 8px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .lookback-table th {
+            background: #f5f7fa;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .lookback-row-label {
+            text-align: left;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .yn-yes {
+            color: #155724;
+            background: #d4edda;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .yn-no {
+            color: #721c24;
+            background: #f8d7da;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
@@ -472,6 +538,312 @@
             <br><span style="color: #d32f2f; font-weight: bold;">Помилка: {{ error }}</span>
             {% endif %}
         </div>
+
+        <div class="analysis-results" id="lookbackSection">
+            <h2>⏱ Перевірка сходження до 0/порогів за останні 2/4/8/16 год</h2>
+
+            <div id="lookbackContainer">
+                {% if lookback_checks and lookback_checks.windows and lookback_checks.hours %}
+                <div class="lookback-grid">
+                    {% for hours in lookback_checks.hours %}
+                        {% set win = lookback_checks.windows[hours ~ ''] %}
+                        {% if win %}
+                        <div class="lookback-card">
+                            <h3>Останні {{ hours }} год</h3>
+                            <div class="result-item">
+                                <strong>Період:</strong>
+                                <span class="value">{{ win.start_time }} – {{ win.end_time }}</span>
+                                <span style="color:#666;">({{ win.points }} точок)</span>
+                            </div>
+
+                            <table class="lookback-table">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>min</th>
+                                        <th>max</th>
+                                        <th>avg</th>
+                                        <th>crossed 0</th>
+                                        {% if lookback_checks.abs_thresholds %}
+                                            {% for th in lookback_checks.abs_thresholds %}
+                                            <th>|x| ≤ {{ th }}</th>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="lookback-row-label">In</td>
+                                        <td>{{ "%.4f"|format(win.in.stats.min) if win.in.stats.min is not none else "—" }}</td>
+                                        <td>{{ "%.4f"|format(win.in.stats.max) if win.in.stats.max is not none else "—" }}</td>
+                                        <td>{{ "%.4f"|format(win.in.stats.avg) if win.in.stats.avg is not none else "—" }}</td>
+                                        <td>
+                                            <span class="{{ 'yn-yes' if win.in.crossed_zero else 'yn-no' }}">
+                                                {{ 'так' if win.in.crossed_zero else 'ні' }}
+                                            </span>
+                                        </td>
+                                        {% if lookback_checks.abs_thresholds %}
+                                            {% for th in lookback_checks.abs_thresholds %}
+                                            {% set reached = win.in.reached_abs[th ~ ''] %}
+                                            <td>
+                                                <span class="{{ 'yn-yes' if reached else 'yn-no' }}">
+                                                    {{ 'так' if reached else 'ні' }}
+                                                </span>
+                                            </td>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </tr>
+                                    <tr>
+                                        <td class="lookback-row-label">Out</td>
+                                        <td>{{ "%.4f"|format(win.out.stats.min) if win.out.stats.min is not none else "—" }}</td>
+                                        <td>{{ "%.4f"|format(win.out.stats.max) if win.out.stats.max is not none else "—" }}</td>
+                                        <td>{{ "%.4f"|format(win.out.stats.avg) if win.out.stats.avg is not none else "—" }}</td>
+                                        <td>
+                                            <span class="{{ 'yn-yes' if win.out.crossed_zero else 'yn-no' }}">
+                                                {{ 'так' if win.out.crossed_zero else 'ні' }}
+                                            </span>
+                                        </td>
+                                        {% if lookback_checks.abs_thresholds %}
+                                            {% for th in lookback_checks.abs_thresholds %}
+                                            {% set reached = win.out.reached_abs[th ~ ''] %}
+                                            <td>
+                                                <span class="{{ 'yn-yes' if reached else 'yn-no' }}">
+                                                    {{ 'так' if reached else 'ні' }}
+                                                </span>
+                                            </td>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="method-section" style="border-left-color: #999;">
+                    <p style="color: #666; margin: 0;">Немає даних для розрахунку за часовими вікнами.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="analysis-results" id="inAnalysisSection">
+            <h2>📊 Результати аналізу найчастіших значень спреду входу (In)</h2>
+
+            {% if not in_analysis or (not in_analysis.histogram.most_frequent_bin and in_analysis["mode"]["value"] is none and (not in_analysis.kde.peaks or in_analysis.kde.peaks|length == 0) and (not in_analysis.clustering.clusters or in_analysis.clustering.clusters|length == 0) and in_analysis.quantiles.median is none) %}
+            <div class="method-section" style="border-left-color: #999;">
+                <p style="color: #666; margin: 0;">Немає даних для аналізу або недостатньо точок для обчислення статистики.</p>
+            </div>
+            {% else %}
+
+            <!-- Середнє значення -->
+            {% if average_in_from_methods and average_in_from_methods.average is not none %}
+            <div class="method-section" style="border-left-color: #667eea; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-left-width: 5px;">
+                <h3 style="color: #667eea; font-size: 18px;">
+                    ⭐ Середнє значення
+                    {% if average_in_from_methods.method_names|length == 1 and "Просте середнє" in average_in_from_methods.method_names[0] %}
+                        (просте арифметичне)
+                    {% elif "Просте середнє" in average_in_from_methods.method_names|join("") %}
+                        (комбіноване)
+                    {% else %}
+                        (з методик)
+                    {% endif %}
+                </h3>
+                <div class="result-item" style="background: white; padding: 15px; border-radius: 6px; margin: 10px 0;">
+                    <div id="avg_in_value" style="font-size: 24px; font-weight: bold; color: #667eea; margin-bottom: 10px;">
+                        {{ "%.4f"|format(average_in_from_methods.average) }}
+                    </div>
+                    <div class="result-item" style="background: transparent; padding: 5px 0;">
+                        <strong>Кількість методик, що враховано:</strong>
+                        <span class="value" id="avg_in_count">{{ average_in_from_methods.count }}</span>
+                    </div>
+                    <div class="result-item" style="background: transparent; padding: 5px 0;">
+                        <strong>Методики:</strong>
+                        <span class="value" id="avg_in_methods">{{ average_in_from_methods.method_names|join(", ") }}</span>
+                    </div>
+                    {% if average_in_from_methods["values"]|length > 0 %}
+                    <div class="result-item" style="background: transparent; padding: 5px 0;">
+                        <strong>Значення з кожної методики:</strong>
+                        <ul class="result-list" id="avg_in_values_list" style="margin-top: 8px;">
+                            {% for i in range(average_in_from_methods["values"]|length) %}
+                            <li>
+                                <strong>{{ average_in_from_methods.method_names[i] }}:</strong> 
+                                <span class="value">{{ "%.4f"|format(average_in_from_methods["values"][i]) }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    {% if average_in_from_methods.min is not none and average_in_from_methods.max is not none %}
+                    <div class="result-item" style="background: transparent; padding: 5px 0;">
+                        <strong>Діапазон значень:</strong>
+                        <span class="value" id="avg_in_range">[{{ "%.4f"|format(average_in_from_methods.min) }}, {{ "%.4f"|format(average_in_from_methods.max) }}]</span>
+                    </div>
+                    {% endif %}
+                    {% if average_in_from_methods.std is not none and average_in_from_methods.std > 0 %}
+                    <div class="result-item" style="background: transparent; padding: 5px 0;">
+                        <strong>Стандартне відхилення:</strong>
+                        <span class="value" id="avg_in_std">{{ "%.4f"|format(average_in_from_methods.std) }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Гістограма -->
+            {% if in_analysis.histogram.most_frequent_bin %}
+            <div class="method-section histogram">
+                <h3>
+                    <span class="method-icon"></span>
+                    Гістограма (бінінг)
+                </h3>
+                <div class="result-item">
+                    <strong>Найчастіший діапазон:</strong>
+                    <span class="value">{{ "%.4f"|format(in_analysis.histogram.most_frequent_bin[0]) }} - {{ "%.4f"|format(in_analysis.histogram.most_frequent_bin[1]) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Центр діапазону:</strong>
+                    <span class="value">{{ "%.4f"|format((in_analysis.histogram.most_frequent_bin[0] + in_analysis.histogram.most_frequent_bin[1]) / 2) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Частота (кількість точок):</strong>
+                    <span class="value">{{ in_analysis.histogram.frequency }}</span>
+                </div>
+                {% if in_analysis.histogram.bin_edges and in_analysis.histogram.bin_edges|length > 1 %}
+                <div class="result-item">
+                    <strong>Кількість бінів:</strong>
+                    <span class="value">{{ in_analysis.histogram.bin_edges|length - 1 }}</span>
+                </div>
+                {% endif %}
+                {% if in_analysis.histogram.top_bins and in_analysis.histogram.top_bins|length > 0 %}
+                <div class="result-item">
+                    <strong>Топ-5 найчастіших діапазонів:</strong>
+                    <ul class="result-list">
+                        {% for bin_info in in_analysis.histogram.top_bins %}
+                        <li>
+                            <strong>#{{ loop.index }}:</strong>
+                            Діапазон = [{{ "%.4f"|format(bin_info.bin[0]) }}, {{ "%.4f"|format(bin_info.bin[1]) }}],
+                            Центр = <span class="value">{{ "%.4f"|format(bin_info.center) }}</span>,
+                            Частота = {{ bin_info.frequency }} ({{ "%.2f"|format((bin_info.frequency / total_points * 100) if total_points > 0 else 0) }}%)
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Мода -->
+            {% if in_analysis["mode"]["value"] is not none %}
+            <div class="method-section mode">
+                <h3>
+                    <span class="method-icon"></span>
+                    Мода (найчастіше точне значення)
+                </h3>
+                <div class="result-item">
+                    <strong>Значення моди:</strong>
+                    <span class="value">{{ "%.4f"|format(in_analysis["mode"]["value"]) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Частота (кількість входжень):</strong>
+                    <span class="value">{{ in_analysis["mode"]["frequency"] }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Відсоток від загальної кількості:</strong>
+                    <span class="value">{{ "%.2f"|format((in_analysis["mode"]["frequency"] / total_points * 100) if total_points > 0 else 0) }}%</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- KDE -->
+            {% if in_analysis.kde.peaks and in_analysis.kde.peaks|length > 0 %}
+            <div class="method-section kde">
+                <h3>
+                    <span class="method-icon"></span>
+                    KDE (Kernel Density Estimation) - Піки щільності
+                </h3>
+                <div class="result-item">
+                    <strong>Знайдено піків:</strong>
+                    <span class="value">{{ in_analysis.kde.peaks|length }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Топ піки (найвищі значення щільності):</strong>
+                    <ul class="result-list">
+                        {% for peak in in_analysis.kde.peaks %}
+                        <li>
+                            <strong>Пік {{ loop.index }}:</strong> 
+                            Значення = <span class="value">{{ "%.4f"|format(peak) }}</span>
+                            {% if in_analysis.kde.peak_values and loop.index0 < in_analysis.kde.peak_values|length %}
+                            , Щільність = {{ "%.4f"|format(in_analysis.kde.peak_values[loop.index0]) }}
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Кластеризація -->
+            {% if in_analysis.clustering.clusters and in_analysis.clustering.clusters|length > 0 %}
+            <div class="method-section clustering">
+                <h3>
+                    <span class="method-icon"></span>
+                    Кластеризація ({{ in_analysis.clustering.method|upper if in_analysis.clustering.method else "K-means" }})
+                </h3>
+                <div class="result-item">
+                    <strong>Знайдено кластерів:</strong>
+                    <span class="value">{{ in_analysis.clustering.clusters|length }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Деталі кластерів (відсортовані за кількістю точок):</strong>
+                    <ul class="result-list">
+                        {% for cluster in in_analysis.clustering.clusters %}
+                        <li>
+                            <strong>Кластер {{ loop.index }}:</strong>
+                            Центр = <span class="value">{{ "%.4f"|format(cluster.center) }}</span>,
+                            Діапазон = [{{ "%.4f"|format(cluster.range[0]) }}, {{ "%.4f"|format(cluster.range[1]) }}],
+                            Точок = {{ cluster.points }} ({{ "%.2f"|format((cluster.points / total_points * 100) if total_points > 0 else 0) }}%)
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Квантилі -->
+            {% if in_analysis.quantiles.median is not none %}
+            <div class="method-section quantiles">
+                <h3>
+                    <span class="method-icon"></span>
+                    Квантилі та медіана
+                </h3>
+                <div class="result-item">
+                    <strong>Медіана (Q2, 50-й перцентиль):</strong>
+                    <span class="value">{{ "%.4f"|format(in_analysis.quantiles.median) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Q1 (25-й перцентиль):</strong>
+                    <span class="value">{{ "%.4f"|format(in_analysis.quantiles.q1) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Q3 (75-й перцентиль):</strong>
+                    <span class="value">{{ "%.4f"|format(in_analysis.quantiles.q3) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Інтерквартильний діапазон (IQR = Q3 - Q1):</strong>
+                    <span class="value">{{ "%.4f"|format(in_analysis.quantiles.iqr) }}</span>
+                </div>
+                <div class="result-item">
+                    <strong>Діапазон Q1-Q3:</strong>
+                    <span class="value">[{{ "%.4f"|format(in_analysis.quantiles.q1) }}, {{ "%.4f"|format(in_analysis.quantiles.q3) }}]</span>
+                    <br><small style="color: #666;">Це діапазон, в якому знаходиться 50% всіх значень</small>
+                </div>
+            </div>
+            {% endif %}
+
+            {% endif %}
+        </div>
         
         <div class="analysis-results">
             <h2>📊 Результати аналізу найчастіших значень спреду виходу (Out)</h2>
@@ -496,21 +868,21 @@
                     {% endif %}
                 </h3>
                 <div class="result-item" style="background: white; padding: 15px; border-radius: 6px; margin: 10px 0;">
-                    <div style="font-size: 24px; font-weight: bold; color: #667eea; margin-bottom: 10px;">
+                    <div id="avg_out_value" style="font-size: 24px; font-weight: bold; color: #667eea; margin-bottom: 10px;">
                         {{ "%.4f"|format(average_from_methods.average) }}
                     </div>
                     <div class="result-item" style="background: transparent; padding: 5px 0;">
                         <strong>Кількість методик, що враховано:</strong>
-                        <span class="value">{{ average_from_methods.count }}</span>
+                        <span class="value" id="avg_out_count">{{ average_from_methods.count }}</span>
                     </div>
                     <div class="result-item" style="background: transparent; padding: 5px 0;">
                         <strong>Методики:</strong>
-                        <span class="value">{{ average_from_methods.method_names|join(", ") }}</span>
+                        <span class="value" id="avg_out_methods">{{ average_from_methods.method_names|join(", ") }}</span>
                     </div>
                     {% if average_from_methods["values"]|length > 0 %}
                     <div class="result-item" style="background: transparent; padding: 5px 0;">
                         <strong>Значення з кожної методики:</strong>
-                        <ul class="result-list" style="margin-top: 8px;">
+                        <ul class="result-list" id="avg_out_values_list" style="margin-top: 8px;">
                             {% for i in range(average_from_methods["values"]|length) %}
                             <li>
                                 <strong>{{ average_from_methods.method_names[i] }}:</strong> 
@@ -523,13 +895,13 @@
                     {% if average_from_methods.min is not none and average_from_methods.max is not none %}
                     <div class="result-item" style="background: transparent; padding: 5px 0;">
                         <strong>Діапазон значень:</strong>
-                        <span class="value">[{{ "%.4f"|format(average_from_methods.min) }}, {{ "%.4f"|format(average_from_methods.max) }}]</span>
+                        <span class="value" id="avg_out_range">[{{ "%.4f"|format(average_from_methods.min) }}, {{ "%.4f"|format(average_from_methods.max) }}]</span>
                     </div>
                     {% endif %}
                     {% if average_from_methods.std is not none and average_from_methods.std > 0 %}
                     <div class="result-item" style="background: transparent; padding: 5px 0;">
                         <strong>Стандартне відхилення:</strong>
-                        <span class="value">{{ "%.4f"|format(average_from_methods.std) }}</span>
+                        <span class="value" id="avg_out_std">{{ "%.4f"|format(average_from_methods.std) }}</span>
                     </div>
                     {% endif %}
                 </div>
@@ -1211,7 +1583,10 @@
             total_points: {{ total_points }},
             time_range: {{ time_range|tojson }},
             out_analysis: {{ out_analysis|tojson }},
-            average_from_methods: {{ average_from_methods|tojson }}
+            in_analysis: {{ in_analysis|tojson }},
+            lookback_checks: {{ lookback_checks|tojson }},
+            average_from_methods: {{ average_from_methods|tojson }},
+            average_in_from_methods: {{ average_in_from_methods|tojson }}
         };
         
         // Функція для оновлення графіка через AJAX
@@ -1480,34 +1855,129 @@
         }
         
         // Функція для оновлення статистики
-        function updateStatistics(data) {
-            // Оновлюємо середнє значення
-            const avgSection = document.querySelector('.method-section');
-            if (avgSection && data.average_from_methods && data.average_from_methods.average !== null) {
-                const avgValueDiv = avgSection.querySelector('div[style*="font-size: 24px"]');
-                if (avgValueDiv) {
-                    avgValueDiv.textContent = data.average_from_methods.average.toFixed(4);
-                }
-                
-                // Оновлюємо кількість методик
-                const countSpan = avgSection.querySelector('.value');
-                if (countSpan && countSpan.textContent.trim() === String(currentData.average_from_methods.count)) {
-                    const countElements = avgSection.querySelectorAll('.value');
-                    if (countElements.length > 0) {
-                        countElements[0].textContent = data.average_from_methods.count;
-                    }
-                }
-                
-                // Оновлюємо список методик
-                const methodsSpan = avgSection.querySelectorAll('.value');
-                if (methodsSpan.length > 1) {
-                    methodsSpan[1].textContent = data.average_from_methods.method_names.join(', ');
+        function formatNumber(value, decimals = 4) {
+            if (value === null || value === undefined) return '—';
+            const num = Number(value);
+            if (Number.isNaN(num)) return '—';
+            return num.toFixed(decimals);
+        }
+
+        function yesNoBadge(value) {
+            return value ? '<span class="yn-yes">так</span>' : '<span class="yn-no">ні</span>';
+        }
+
+        function renderLookbackHtml(lookback) {
+            if (!lookback || !lookback.windows) {
+                return '<div class="method-section" style="border-left-color: #999;"><p style="color: #666; margin: 0;">Немає даних для розрахунку за часовими вікнами.</p></div>';
+            }
+
+            const hoursList = Array.isArray(lookback.hours)
+                ? lookback.hours
+                : Object.keys(lookback.windows).map(h => parseInt(h, 10)).filter(n => !Number.isNaN(n)).sort((a, b) => a - b);
+
+            const thresholds = Array.isArray(lookback.abs_thresholds) ? lookback.abs_thresholds : [];
+            let thresholdKeys = thresholds.map(t => Number.isInteger(Number(t)) ? Number(t).toFixed(1) : String(t));
+
+            if (!thresholdKeys || thresholdKeys.length === 0) {
+                const firstKey = Object.keys(lookback.windows)[0];
+                const firstWin = firstKey ? lookback.windows[firstKey] : null;
+                if (firstWin && firstWin.in && firstWin.in.reached_abs) {
+                    thresholdKeys = Object.keys(firstWin.in.reached_abs);
+                } else {
+                    thresholdKeys = [];
                 }
             }
-            
-            // Оновлюємо інші секції аналізу (гістограма, мода, KDE, тощо)
-            // Для повного оновлення можна використати перезавантаження сторінки або детальну перебудову DOM
-            // Зараз оновлюємо тільки основні елементи
+
+            let html = '<div class="lookback-grid">';
+
+            hoursList.forEach(hours => {
+                const win = lookback.windows[String(hours)];
+                if (!win) return;
+
+                html += '<div class="lookback-card">';
+                html += `<h3>Останні ${hours} год</h3>`;
+                html += `<div class="result-item"><strong>Період:</strong> <span class="value">${win.start_time || '—'} – ${win.end_time || '—'}</span> <span style="color:#666;">(${win.points ?? 0} точок)</span></div>`;
+
+                html += '<table class="lookback-table"><thead><tr><th></th><th>min</th><th>max</th><th>avg</th><th>crossed 0</th>';
+                thresholdKeys.forEach(key => {
+                    html += `<th>|x| ≤ ${key}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+
+                const renderRow = (label, row) => {
+                    const stats = row && row.stats ? row.stats : {};
+                    let rowHtml = `<tr><td class="lookback-row-label">${label}</td>`;
+                    rowHtml += `<td>${formatNumber(stats.min, 4)}</td>`;
+                    rowHtml += `<td>${formatNumber(stats.max, 4)}</td>`;
+                    rowHtml += `<td>${formatNumber(stats.avg, 4)}</td>`;
+                    rowHtml += `<td>${yesNoBadge(!!(row && row.crossed_zero))}</td>`;
+                    thresholdKeys.forEach(key => {
+                        const reached = row && row.reached_abs ? !!row.reached_abs[key] : false;
+                        rowHtml += `<td>${yesNoBadge(reached)}</td>`;
+                    });
+                    rowHtml += '</tr>';
+                    return rowHtml;
+                };
+
+                html += renderRow('In', win.in);
+                html += renderRow('Out', win.out);
+
+                html += '</tbody></table>';
+                html += '</div>';
+            });
+
+            html += '</div>';
+            return html;
+        }
+
+        function updateLookbackChecks(data) {
+            const container = document.getElementById('lookbackContainer');
+            if (!container) return;
+            container.innerHTML = renderLookbackHtml(data.lookback_checks);
+        }
+
+        function updateAverageUI(prefix, avg) {
+            if (!avg) return;
+
+            const valueEl = document.getElementById(`avg_${prefix}_value`);
+            if (valueEl && avg.average !== null && avg.average !== undefined) {
+                valueEl.textContent = formatNumber(avg.average, 4);
+            }
+
+            const countEl = document.getElementById(`avg_${prefix}_count`);
+            if (countEl && avg.count !== null && avg.count !== undefined) {
+                countEl.textContent = String(avg.count);
+            }
+
+            const methodsEl = document.getElementById(`avg_${prefix}_methods`);
+            if (methodsEl && Array.isArray(avg.method_names)) {
+                methodsEl.textContent = avg.method_names.join(', ');
+            }
+
+            const listEl = document.getElementById(`avg_${prefix}_values_list`);
+            if (listEl && Array.isArray(avg.values) && Array.isArray(avg.method_names)) {
+                const items = avg.values.map((v, i) => {
+                    const name = avg.method_names[i] || `Метод ${i + 1}`;
+                    return `<li><strong>${name}:</strong> <span class="value">${formatNumber(v, 4)}</span></li>`;
+                }).join('');
+                listEl.innerHTML = items;
+            }
+
+            const rangeEl = document.getElementById(`avg_${prefix}_range`);
+            if (rangeEl && avg.min !== null && avg.min !== undefined && avg.max !== null && avg.max !== undefined) {
+                rangeEl.textContent = `[${formatNumber(avg.min, 4)}, ${formatNumber(avg.max, 4)}]`;
+            }
+
+            const stdEl = document.getElementById(`avg_${prefix}_std`);
+            if (stdEl && avg.std !== null && avg.std !== undefined) {
+                stdEl.textContent = formatNumber(avg.std, 4);
+            }
+        }
+
+        function updateStatistics(data) {
+            updateLookbackChecks(data);
+            updateAverageUI('out', data.average_from_methods);
+            updateAverageUI('in', data.average_in_from_methods);
         }
         
         // Функція для оновлення поточних значень

@@ -9,6 +9,118 @@ from sklearn.cluster import KMeans, DBSCAN
 from models.schemas import SpreadPoint, APIResponse
 
 
+def _format_dt(ts: int) -> str:
+    """Форматує unix timestamp (секунди) у читабельний рядок."""
+    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _filter_by_lookback_hours(spreads: List[SpreadPoint], hours: int, end_ts: int) -> List[SpreadPoint]:
+    """Фільтрує точки за останні `hours` годин відносно `end_ts`."""
+    start_ts = int(end_ts - hours * 3600)
+    return [p for p in spreads if start_ts <= p.t <= end_ts]
+
+
+def _series_basic_stats(values: List[float]) -> Dict[str, Any]:
+    """Базова статистика для ряду."""
+    if not values:
+        return {
+            "count": 0,
+            "min": None,
+            "max": None,
+            "avg": None,
+            "min_abs": None,
+            "max_abs": None,
+        }
+
+    vmin = float(min(values))
+    vmax = float(max(values))
+    avg = float(sum(values) / len(values))
+    abs_values = [abs(v) for v in values]
+    return {
+        "count": int(len(values)),
+        "min": vmin,
+        "max": vmax,
+        "avg": avg,
+        "min_abs": float(min(abs_values)) if abs_values else None,
+        "max_abs": float(max(abs_values)) if abs_values else None,
+    }
+
+
+def _series_crosses_zero(values: List[float]) -> bool:
+    """Перевіряє, чи ряд перетинав/торкався 0 (наявні значення різних знаків або 0)."""
+    if not values:
+        return False
+    has_neg = any(v < 0 for v in values)
+    has_pos = any(v > 0 for v in values)
+    has_zero = any(v == 0 for v in values)
+    return bool(has_zero or (has_neg and has_pos))
+
+
+def _series_reaches_abs_threshold(values: List[float], threshold: float) -> bool:
+    """Перевіряє, чи було значення з модулем <= threshold."""
+    if not values:
+        return False
+    return any(abs(v) <= threshold for v in values)
+
+
+def compute_lookback_checks(
+    spreads: List[SpreadPoint],
+    hours_list: List[int] = None,
+    abs_thresholds: List[float] = None,
+) -> Dict[str, Any]:
+    """
+    Обчислює min/max/avg та перевірки перетину 0 і досягнення |x|<=threshold
+    для серій in та out за заданими часовими вікнами.
+    """
+    if hours_list is None:
+        hours_list = [2, 4, 8, 16]
+    if abs_thresholds is None:
+        abs_thresholds = [0.5, 1.0]
+
+    if not spreads:
+        return {"hours": hours_list, "abs_thresholds": abs_thresholds, "windows": {}}
+
+    sorted_spreads = sorted(spreads, key=lambda x: x.t)
+    end_ts = int(sorted_spreads[-1].t)
+
+    windows: Dict[str, Any] = {}
+    for hours in hours_list:
+        window_spreads = _filter_by_lookback_hours(sorted_spreads, hours, end_ts)
+        values_in = [p.in_ for p in window_spreads]
+        values_out = [p.out for p in window_spreads]
+
+        reached_in = {str(th): _series_reaches_abs_threshold(values_in, th) for th in abs_thresholds}
+        reached_out = {str(th): _series_reaches_abs_threshold(values_out, th) for th in abs_thresholds}
+
+        start_ts = int(end_ts - hours * 3600)
+        windows[str(hours)] = {
+            "hours": int(hours),
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+            "start_time": _format_dt(start_ts),
+            "end_time": _format_dt(end_ts),
+            "points": int(len(window_spreads)),
+            "in": {
+                "stats": _series_basic_stats(values_in),
+                "crossed_zero": _series_crosses_zero(values_in),
+                "reached_abs": reached_in,
+            },
+            "out": {
+                "stats": _series_basic_stats(values_out),
+                "crossed_zero": _series_crosses_zero(values_out),
+                "reached_abs": reached_out,
+            },
+        }
+
+    return {
+        "hours": [int(h) for h in hours_list],
+        "abs_thresholds": [float(t) for t in abs_thresholds],
+        "end_ts": end_ts,
+        "end_time": _format_dt(end_ts),
+        "windows": windows,
+    }
+
+
 async def fetch_historical_data(url_or_slug: str, limit: int = 1500) -> List[SpreadPoint]:
     """
     Завантажує історичні дані спреду з API.
@@ -86,6 +198,53 @@ def calculate_most_frequent_spread(convergence_points: List[SpreadPoint]) -> Tup
     return most_common[0], most_common[1]
 
 
+def _analyze_values_histogram(values: List[float], bins: int = None) -> Dict[str, Any]:
+    """Аналізує ряд через гістограму з бінінгом."""
+    if not values:
+        return {
+            "most_frequent_bin": None,
+            "frequency": 0,
+            "bins": [],
+            "frequencies": [],
+            "bin_edges": [],
+            "top_bins": [],
+        }
+
+    arr = np.array(values)
+
+    # Автоматичне визначення кількості бінів за правилом Стреджеса
+    if bins is None:
+        n = len(arr)
+        bins = int(np.ceil(1 + np.log2(n))) if n > 0 else 10
+
+    frequencies, bin_edges = np.histogram(arr, bins=bins)
+
+    max_freq_idx = int(np.argmax(frequencies)) if len(frequencies) > 0 else 0
+    most_frequent_bin = (float(bin_edges[max_freq_idx]), float(bin_edges[max_freq_idx + 1])) if len(bin_edges) > 1 else None
+    frequency = int(frequencies[max_freq_idx]) if len(frequencies) > 0 else 0
+
+    # Топ-5 найчастіших бінів
+    top_bins: List[Dict[str, Any]] = []
+    if len(frequencies) > 0:
+        top_indices = np.argsort(frequencies)[::-1][:5]
+        for idx in top_indices:
+            if frequencies[idx] > 0:
+                top_bins.append({
+                    "bin": (float(bin_edges[idx]), float(bin_edges[idx + 1])),
+                    "center": float((bin_edges[idx] + bin_edges[idx + 1]) / 2),
+                    "frequency": int(frequencies[idx])
+                })
+
+    return {
+        "most_frequent_bin": most_frequent_bin,
+        "frequency": frequency,
+        "bins": bin_edges.tolist(),
+        "frequencies": frequencies.tolist(),
+        "bin_edges": bin_edges.tolist(),
+        "top_bins": top_bins
+    }
+
+
 def analyze_out_histogram(spreads: List[SpreadPoint], bins: int = None) -> Dict[str, Any]:
     """
     Аналізує значення out через гістограму з бінінгом.
@@ -97,49 +256,49 @@ def analyze_out_histogram(spreads: List[SpreadPoint], bins: int = None) -> Dict[
     Returns:
         Словник з результатами аналізу гістограми
     """
-    if not spreads:
-        return {
-            "most_frequent_bin": None,
-            "frequency": 0,
-            "bins": [],
-            "frequencies": [],
-            "bin_edges": []
-        }
-    
-    out_values = np.array([point.out for point in spreads])
-    
-    # Автоматичне визначення кількості бінів за правилом Стреджеса
-    if bins is None:
-        n = len(out_values)
-        bins = int(np.ceil(1 + np.log2(n))) if n > 0 else 10
-    
-    # Обчислюємо гістограму
-    frequencies, bin_edges = np.histogram(out_values, bins=bins)
-    
-    # Знаходимо бін з найбільшою частотою
-    max_freq_idx = np.argmax(frequencies)
-    most_frequent_bin = (bin_edges[max_freq_idx], bin_edges[max_freq_idx + 1])
-    frequency = int(frequencies[max_freq_idx])
-    
-    # Знаходимо топ-5 найчастіших бінів
-    top_indices = np.argsort(frequencies)[::-1][:5]
-    top_bins = []
-    for idx in top_indices:
-        if frequencies[idx] > 0:
-            top_bins.append({
-                "bin": (float(bin_edges[idx]), float(bin_edges[idx + 1])),
-                "center": float((bin_edges[idx] + bin_edges[idx + 1]) / 2),
-                "frequency": int(frequencies[idx])
-            })
-    
-    return {
-        "most_frequent_bin": most_frequent_bin,
-        "frequency": frequency,
-        "bins": bin_edges.tolist(),
-        "frequencies": frequencies.tolist(),
-        "bin_edges": bin_edges.tolist(),
-        "top_bins": top_bins
-    }
+    values = [point.out for point in spreads] if spreads else []
+    return _analyze_values_histogram(values, bins=bins)
+
+
+def analyze_in_histogram(spreads: List[SpreadPoint], bins: int = None) -> Dict[str, Any]:
+    """Аналізує значення in через гістограму з бінінгом."""
+    values = [point.in_ for point in spreads] if spreads else []
+    return _analyze_values_histogram(values, bins=bins)
+
+
+def _analyze_values_kde(values: List[float], num_points: int = 1000) -> Dict[str, Any]:
+    """Аналізує ряд через KDE (Kernel Density Estimation)."""
+    if not values or len(values) < 2:
+        return {"peaks": [], "peak_values": [], "density_x": [], "density_y": []}
+
+    arr = np.array(values)
+    try:
+        kde = stats.gaussian_kde(arr)
+    except Exception:
+        # Напр. сингулярна коваріація при нульовій дисперсії
+        return {"peaks": [], "peak_values": [], "density_x": [], "density_y": []}
+
+    x_min, x_max = float(arr.min()), float(arr.max())
+    x_range = x_max - x_min
+    if x_range == 0:
+        return {"peaks": [x_min], "peak_values": [1.0], "density_x": [x_min], "density_y": [1.0]}
+
+    x_eval = np.linspace(x_min - 0.1 * x_range, x_max + 0.1 * x_range, num_points)
+    density = kde(x_eval)
+
+    height_threshold = float(np.max(density)) * 0.1 if len(density) > 0 else 0.0
+    peaks_indices, _properties = find_peaks(density, height=height_threshold, distance=max(1, num_points // 20))
+
+    peaks = x_eval[peaks_indices].tolist() if len(peaks_indices) > 0 else []
+    peak_values = density[peaks_indices].tolist() if len(peaks_indices) > 0 else []
+
+    # Сортуємо піки за значенням щільності (найвищі першими)
+    if peaks:
+        sorted_indices = np.argsort(peak_values)[::-1]
+        peaks = [peaks[i] for i in sorted_indices]
+        peak_values = [peak_values[i] for i in sorted_indices]
+
+    return {"peaks": peaks, "peak_values": peak_values, "density_x": x_eval.tolist(), "density_y": density.tolist()}
 
 
 def analyze_out_kde(spreads: List[SpreadPoint], num_points: int = 1000) -> Dict[str, Any]:
@@ -153,45 +312,25 @@ def analyze_out_kde(spreads: List[SpreadPoint], num_points: int = 1000) -> Dict[
     Returns:
         Словник з результатами KDE аналізу
     """
-    if not spreads or len(spreads) < 2:
-        return {
-            "peaks": [],
-            "peak_values": [],
-            "density_x": [],
-            "density_y": []
-        }
-    
-    out_values = np.array([point.out for point in spreads])
-    
-    # Створюємо KDE
-    kde = stats.gaussian_kde(out_values)
-    
-    # Створюємо діапазон для оцінки
-    x_min, x_max = out_values.min(), out_values.max()
-    x_range = x_max - x_min
-    x_eval = np.linspace(x_min - 0.1 * x_range, x_max + 0.1 * x_range, num_points)
-    density = kde(x_eval)
-    
-    # Знаходимо локальні максимуми (піки)
-    # Використовуємо height для фільтрації малих піків
-    height_threshold = np.max(density) * 0.1  # 10% від максимального значення
-    peaks_indices, properties = find_peaks(density, height=height_threshold, distance=num_points // 20)
-    
-    peaks = x_eval[peaks_indices].tolist() if len(peaks_indices) > 0 else []
-    peak_values = density[peaks_indices].tolist() if len(peaks_indices) > 0 else []
-    
-    # Сортуємо піки за значенням щільності (найвищі першими)
-    if peaks:
-        sorted_indices = np.argsort(peak_values)[::-1]
-        peaks = [peaks[i] for i in sorted_indices]
-        peak_values = [peak_values[i] for i in sorted_indices]
-    
-    return {
-        "peaks": peaks,
-        "peak_values": peak_values,
-        "density_x": x_eval.tolist(),
-        "density_y": density.tolist()
-    }
+    values = [point.out for point in spreads] if spreads else []
+    return _analyze_values_kde(values, num_points=num_points)
+
+
+def analyze_in_kde(spreads: List[SpreadPoint], num_points: int = 1000) -> Dict[str, Any]:
+    """Аналізує значення in через KDE (Kernel Density Estimation)."""
+    values = [point.in_ for point in spreads] if spreads else []
+    return _analyze_values_kde(values, num_points=num_points)
+
+
+def _analyze_values_mode(values: List[float], precision: float = 0.01) -> Dict[str, Any]:
+    """Знаходить моду (найчастіше значення) для ряду з округленням до precision."""
+    if not values:
+        return {"value": None, "frequency": 0}
+
+    rounded_values = [round(v / precision) * precision for v in values]
+    counter = Counter(rounded_values)
+    most_common = counter.most_common(1)[0]
+    return {"value": most_common[0], "frequency": most_common[1]}
 
 
 def analyze_out_mode(spreads: List[SpreadPoint], precision: float = 0.01) -> Dict[str, Any]:
@@ -205,23 +344,72 @@ def analyze_out_mode(spreads: List[SpreadPoint], precision: float = 0.01) -> Dic
     Returns:
         Словник з результатами моди
     """
-    if not spreads:
-        return {
-            "value": None,
-            "frequency": 0
-        }
-    
-    # Округлюємо значення для групування
-    out_values = [round(point.out / precision) * precision for point in spreads]
-    
-    # Підраховуємо частоту
-    counter = Counter(out_values)
-    most_common = counter.most_common(1)[0]
-    
-    return {
-        "value": most_common[0],
-        "frequency": most_common[1]
-    }
+    values = [point.out for point in spreads] if spreads else []
+    return _analyze_values_mode(values, precision=precision)
+
+
+def analyze_in_mode(spreads: List[SpreadPoint], precision: float = 0.01) -> Dict[str, Any]:
+    """Знаходить моду (найчастіше значення) для in."""
+    values = [point.in_ for point in spreads] if spreads else []
+    return _analyze_values_mode(values, precision=precision)
+
+
+def _analyze_values_clustering(values: List[float], method: str = "kmeans", n_clusters: int = None) -> Dict[str, Any]:
+    """Аналізує ряд через кластеризацію (KMeans або DBSCAN)."""
+    if not values or len(values) < 2:
+        return {"clusters": []}
+
+    arr = np.array(values).reshape(-1, 1)
+
+    if method == "kmeans":
+        if n_clusters is None:
+            n_clusters = min(5, max(2, len(values) // 100))
+        n_clusters = max(1, min(int(n_clusters), len(values)))
+
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+        labels = kmeans.fit_predict(arr)
+        centers = kmeans.cluster_centers_.flatten()
+
+        clusters: List[Dict[str, Any]] = []
+        for i, center in enumerate(centers):
+            cluster_points = arr[labels == i].flatten()
+            if len(cluster_points) > 0:
+                clusters.append({
+                    "center": float(center),
+                    "points": int(len(cluster_points)),
+                    "range": (float(cluster_points.min()), float(cluster_points.max()))
+                })
+        clusters.sort(key=lambda x: x["points"], reverse=True)
+        return {"clusters": clusters, "method": "kmeans"}
+
+    # dbscan
+    sorted_values = np.sort(arr.flatten())
+    diffs = np.diff(sorted_values)
+    diffs_pos = diffs[diffs > 0]
+    if len(diffs_pos) == 0:
+        eps = 1e-6
+    else:
+        eps = float(np.percentile(diffs_pos, 50)) * 3
+        if eps <= 0:
+            eps = 1e-6
+
+    dbscan = DBSCAN(eps=eps, min_samples=max(2, len(values) // 100))
+    labels = dbscan.fit_predict(arr)
+
+    clusters: List[Dict[str, Any]] = []
+    unique_labels = set(labels)
+    unique_labels.discard(-1)  # шум
+
+    for label in unique_labels:
+        cluster_points = arr[labels == label].flatten()
+        if len(cluster_points) > 0:
+            clusters.append({
+                "center": float(cluster_points.mean()),
+                "points": int(len(cluster_points)),
+                "range": (float(cluster_points.min()), float(cluster_points.max()))
+            })
+    clusters.sort(key=lambda x: x["points"], reverse=True)
+    return {"clusters": clusters, "method": "dbscan"}
 
 
 def analyze_out_clustering(spreads: List[SpreadPoint], method: str = "kmeans", n_clusters: int = None) -> Dict[str, Any]:
@@ -236,65 +424,27 @@ def analyze_out_clustering(spreads: List[SpreadPoint], method: str = "kmeans", n
     Returns:
         Словник з результатами кластеризації
     """
-    if not spreads or len(spreads) < 2:
-        return {
-            "clusters": []
-        }
-    
-    out_values = np.array([point.out for point in spreads]).reshape(-1, 1)
-    
-    if method == "kmeans":
-        # Автоматичне визначення кількості кластерів (elbow method спрощений)
-        if n_clusters is None:
-            n_clusters = min(5, max(2, len(spreads) // 100))
-        
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(out_values)
-        centers = kmeans.cluster_centers_.flatten()
-        
-        clusters = []
-        for i, center in enumerate(centers):
-            cluster_points = out_values[labels == i].flatten()
-            if len(cluster_points) > 0:
-                clusters.append({
-                    "center": float(center),
-                    "points": int(len(cluster_points)),
-                    "range": (float(cluster_points.min()), float(cluster_points.max()))
-                })
-        
-        # Сортуємо за кількістю точок (найбільші першими)
-        clusters.sort(key=lambda x: x["points"], reverse=True)
-        
-    else:  # dbscan
-        # Автоматичне визначення eps
-        sorted_values = np.sort(out_values.flatten())
-        diffs = np.diff(sorted_values)
-        eps = np.percentile(diffs[diffs > 0], 50) * 3  # медіана ненульових різниць * 3
-        
-        dbscan = DBSCAN(eps=eps, min_samples=max(2, len(spreads) // 100))
-        labels = dbscan.fit_predict(out_values)
-        
-        clusters = []
-        unique_labels = set(labels)
-        if -1 in unique_labels:
-            unique_labels.remove(-1)  # Виключаємо шум
-        
-        for label in unique_labels:
-            cluster_points = out_values[labels == label].flatten()
-            if len(cluster_points) > 0:
-                clusters.append({
-                    "center": float(cluster_points.mean()),
-                    "points": int(len(cluster_points)),
-                    "range": (float(cluster_points.min()), float(cluster_points.max()))
-                })
-        
-        # Сортуємо за кількістю точок
-        clusters.sort(key=lambda x: x["points"], reverse=True)
-    
-    return {
-        "clusters": clusters,
-        "method": method
-    }
+    values = [point.out for point in spreads] if spreads else []
+    return _analyze_values_clustering(values, method=method, n_clusters=n_clusters)
+
+
+def analyze_in_clustering(spreads: List[SpreadPoint], method: str = "kmeans", n_clusters: int = None) -> Dict[str, Any]:
+    """Аналізує значення in через кластеризацію."""
+    values = [point.in_ for point in spreads] if spreads else []
+    return _analyze_values_clustering(values, method=method, n_clusters=n_clusters)
+
+
+def _analyze_values_quantiles(values: List[float]) -> Dict[str, Any]:
+    """Обчислює квантилі для ряду."""
+    if not values:
+        return {"median": None, "q1": None, "q3": None, "iqr": None}
+
+    arr = np.array(values)
+    median = float(np.median(arr))
+    q1 = float(np.percentile(arr, 25))
+    q3 = float(np.percentile(arr, 75))
+    iqr = q3 - q1
+    return {"median": median, "q1": q1, "q3": q3, "iqr": iqr}
 
 
 def analyze_out_quantiles(spreads: List[SpreadPoint]) -> Dict[str, Any]:
@@ -307,27 +457,14 @@ def analyze_out_quantiles(spreads: List[SpreadPoint]) -> Dict[str, Any]:
     Returns:
         Словник з квантилями
     """
-    if not spreads:
-        return {
-            "median": None,
-            "q1": None,
-            "q3": None,
-            "iqr": None
-        }
-    
-    out_values = np.array([point.out for point in spreads])
-    
-    median = float(np.median(out_values))
-    q1 = float(np.percentile(out_values, 25))
-    q3 = float(np.percentile(out_values, 75))
-    iqr = q3 - q1
-    
-    return {
-        "median": median,
-        "q1": q1,
-        "q3": q3,
-        "iqr": iqr
-    }
+    values = [point.out for point in spreads] if spreads else []
+    return _analyze_values_quantiles(values)
+
+
+def analyze_in_quantiles(spreads: List[SpreadPoint]) -> Dict[str, Any]:
+    """Обчислює квантилі для значень in."""
+    values = [point.in_ for point in spreads] if spreads else []
+    return _analyze_values_quantiles(values)
 
 
 def calculate_average_from_methods(
@@ -417,6 +554,17 @@ def calculate_simple_mean(spreads: List[SpreadPoint]) -> float:
     return float(np.mean(out_values))
 
 
+def calculate_simple_mean_in(spreads: List[SpreadPoint]) -> float:
+    """
+    Обчислює просте середнє арифметичне всіх значень in.
+    """
+    if not spreads:
+        return 0.0
+
+    in_values = [point.in_ for point in spreads]
+    return float(np.mean(in_values))
+
+
 def prepare_chart_data(
     spreads: List[SpreadPoint],
     avg_method: str = "methods",
@@ -440,6 +588,13 @@ def prepare_chart_data(
         - out_analysis: результати аналізу найчастіших значень out
     """
     if not spreads:
+        empty_analysis = {
+            "histogram": _analyze_values_histogram([]),
+            "kde": _analyze_values_kde([]),
+            "mode": _analyze_values_mode([]),
+            "clustering": _analyze_values_clustering([]),
+            "quantiles": _analyze_values_quantiles([]),
+        }
         return {
             "timestamps": [],
             "in_values": [],
@@ -448,19 +603,23 @@ def prepare_chart_data(
             "current_out": None,
             "total_points": 0,
             "time_range": "Немає даних",
-            "out_analysis": {
-                "histogram": {},
-                "kde": {},
-                "mode": {},
-                "clustering": {},
-                "quantiles": {}
-            },
+            "lookback_checks": {"hours": [2, 4, 8, 16], "abs_thresholds": [0.5, 1.0], "windows": {}},
+            "out_analysis": empty_analysis,
+            "in_analysis": empty_analysis,
             "average_from_methods": {
                 "average": None,
                 "count": 0,
                 "values": [],
                 "method_names": []
-            }
+            },
+            "average_in_from_methods": {
+                "average": None,
+                "count": 0,
+                "values": [],
+                "method_names": []
+            },
+            "simple_mean": 0.0,
+            "simple_mean_in": 0.0
         }
     
     # Сортуємо за timestamp (якщо ще не відсортовано)
@@ -501,9 +660,19 @@ def prepare_chart_data(
         "clustering": analyze_out_clustering(sorted_spreads),
         "quantiles": analyze_out_quantiles(sorted_spreads)
     }
+
+    # Аналіз найчастіших значень in
+    in_analysis = {
+        "histogram": analyze_in_histogram(sorted_spreads),
+        "kde": analyze_in_kde(sorted_spreads),
+        "mode": analyze_in_mode(sorted_spreads),
+        "clustering": analyze_in_clustering(sorted_spreads),
+        "quantiles": analyze_in_quantiles(sorted_spreads)
+    }
     
     # Обчислюємо середнє значення залежно від вибраного методу
-    simple_mean = calculate_simple_mean(sorted_spreads)
+    simple_mean = calculate_simple_mean(sorted_spreads)  # out
+    simple_mean_in = calculate_simple_mean_in(sorted_spreads)
     
     if avg_method == "simple":
         # Використовуємо просте середнє арифметичне
@@ -516,9 +685,19 @@ def prepare_chart_data(
             "max": simple_mean,
             "std": 0.0
         }
+        average_in_from_methods = {
+            "average": simple_mean_in,
+            "count": 1,
+            "values": [simple_mean_in],
+            "method_names": ["Просте середнє арифметичне"],
+            "min": simple_mean_in,
+            "max": simple_mean_in,
+            "std": 0.0
+        }
     elif avg_method == "both":
         # Обчислюємо середнє з методик та додаємо просте середнє
         methods_avg = calculate_average_from_methods(out_analysis, enabled_methods)
+        methods_avg_in = calculate_average_from_methods(in_analysis, enabled_methods)
         if methods_avg["average"] is not None:
             all_values = methods_avg["values"] + [simple_mean]
             all_names = methods_avg["method_names"] + ["Просте середнє"]
@@ -542,9 +721,35 @@ def prepare_chart_data(
                 "max": simple_mean,
                 "std": 0.0
             }
+
+        if methods_avg_in["average"] is not None:
+            all_values_in = methods_avg_in["values"] + [simple_mean_in]
+            all_names_in = methods_avg_in["method_names"] + ["Просте середнє"]
+            average_in_from_methods = {
+                "average": float(np.mean(all_values_in)),
+                "count": len(all_values_in),
+                "values": all_values_in,
+                "method_names": all_names_in,
+                "min": float(np.min(all_values_in)),
+                "max": float(np.max(all_values_in)),
+                "std": float(np.std(all_values_in)) if len(all_values_in) > 1 else 0.0
+            }
+        else:
+            average_in_from_methods = {
+                "average": simple_mean_in,
+                "count": 1,
+                "values": [simple_mean_in],
+                "method_names": ["Просте середнє арифметичне"],
+                "min": simple_mean_in,
+                "max": simple_mean_in,
+                "std": 0.0
+            }
     else:  # avg_method == "methods" (за замовчуванням)
         # Використовуємо тільки методики
         average_from_methods = calculate_average_from_methods(out_analysis, enabled_methods)
+        average_in_from_methods = calculate_average_from_methods(in_analysis, enabled_methods)
+
+    lookback_checks = compute_lookback_checks(sorted_spreads)
     
     return {
         "timestamps": timestamps,
@@ -555,8 +760,12 @@ def prepare_chart_data(
         "last_timestamp": last_timestamp,
         "total_points": len(spreads),
         "time_range": time_range,
+        "lookback_checks": lookback_checks,
         "out_analysis": out_analysis,
+        "in_analysis": in_analysis,
         "average_from_methods": average_from_methods,
-        "simple_mean": simple_mean
+        "average_in_from_methods": average_in_from_methods,
+        "simple_mean": simple_mean,
+        "simple_mean_in": simple_mean_in
     }
 
