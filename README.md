@@ -119,6 +119,7 @@ http://localhost:8000/analyze?url=https://uainvest.com.ua/api/arbitrage/historic
     - `average_in_from_methods` — середнє значення для `in` (залежно від `avg_method` і вибраних методик)
     - `simple_mean_in` — просте середнє для `in`
     - `lookback_checks` — статистика та перевірки для `in`/`out` за останні 2/4/8/16 год
+    - `convergence_statistics_in` / `convergence_statistics_out` — min/max/avg у точках сходження окремо для `in` та `out` (поле `convergence_statistics` лишається для сумісності)
   
 - **HTML формат** (`format=html`):
   - Повертає HTML сторінку з інтерактивною діаграмою Plotly

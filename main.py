@@ -83,12 +83,19 @@ async def analyze_spread(
         
         # Обчислюємо статистику
         if convergence_points:
-            spread_values = [point.in_ for point in convergence_points]
-            min_value = min(spread_values)
-            max_value = max(spread_values)
-            avg_value = sum(spread_values) / len(spread_values)
+            in_values_conv = [point.in_ for point in convergence_points]
+            out_values_conv = [point.out for point in convergence_points]
+
+            min_value_in = min(in_values_conv)
+            max_value_in = max(in_values_conv)
+            avg_value_in = sum(in_values_conv) / len(in_values_conv)
+
+            min_value_out = min(out_values_conv)
+            max_value_out = max(out_values_conv)
+            avg_value_out = sum(out_values_conv) / len(out_values_conv)
         else:
-            min_value = max_value = avg_value = 0.0
+            min_value_in = max_value_in = avg_value_in = 0.0
+            min_value_out = max_value_out = avg_value_out = 0.0
         
         # Виводимо результати в консоль
         print("\n" + "="*60)
@@ -104,9 +111,14 @@ async def analyze_spread(
             print(f"Кількість входжень: {frequency}")
             print("-"*60)
             print("Статистика значень спреду в точках сходження:")
-            print(f"  Мінімальне: {min_value:.6f}")
-            print(f"  Максимальне: {max_value:.6f}")
-            print(f"  Середнє: {avg_value:.6f}")
+            print("  In:")
+            print(f"    Мінімальне: {min_value_in:.6f}")
+            print(f"    Максимальне: {max_value_in:.6f}")
+            print(f"    Середнє: {avg_value_in:.6f}")
+            print("  Out:")
+            print(f"    Мінімальне: {min_value_out:.6f}")
+            print(f"    Максимальне: {max_value_out:.6f}")
+            print(f"    Середнє: {avg_value_out:.6f}")
         else:
             print("Точки сходження не знайдено з заданою толерантністю.")
         
@@ -180,10 +192,22 @@ async def analyze_spread(
                 "convergence_points_count": len(convergence_points),
                 "most_frequent_spread": most_frequent_value,
                 "frequency": frequency,
+                # Беквард-сумісні поля (історично рахувались по in_)
                 "convergence_statistics": {
-                    "min": min_value,
-                    "max": max_value,
-                    "avg": avg_value
+                    "min": min_value_in,
+                    "max": max_value_in,
+                    "avg": avg_value_in
+                },
+                # Нові симетричні поля
+                "convergence_statistics_in": {
+                    "min": min_value_in,
+                    "max": max_value_in,
+                    "avg": avg_value_in
+                },
+                "convergence_statistics_out": {
+                    "min": min_value_out,
+                    "max": max_value_out,
+                    "avg": avg_value_out
                 }
             })
         
@@ -195,9 +219,10 @@ async def analyze_spread(
             "most_frequent_spread": most_frequent_value,
             "frequency": frequency,
             "statistics": {
-                "min": min_value,
-                "max": max_value,
-                "avg": avg_value
+                # Беквард-сумісно (як було)
+                "min": min_value_in,
+                "max": max_value_in,
+                "avg": avg_value_in
             }
         })
     

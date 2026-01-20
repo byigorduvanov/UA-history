@@ -1321,12 +1321,44 @@
         annotations.push({
             x: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
             y: overallAvg,
-            text: 'Середнє: ' + overallAvg.toFixed(4),
+            text: 'Середнє Out: ' + overallAvg.toFixed(4),
             showarrow: true,
             arrowhead: 2,
             arrowcolor: '#667eea',
+            ax: 0,
+            ay: -40,
             bgcolor: 'rgba(102, 126, 234, 0.9)',
             bordercolor: '#667eea',
+            font: { color: 'white', size: 11, weight: 'bold' }
+        });
+        {% endif %}
+
+        // Загальне середнє значення In (з усіх методик / simple / both залежно від avg_method)
+        {% if average_in_from_methods and average_in_from_methods.average is not none %}
+        var overallAvgIn = {{ average_in_from_methods.average|tojson }};
+        shapes.push({
+            type: 'line',
+            x0: {{ timestamps|tojson }}[0],
+            x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y0: overallAvgIn,
+            y1: overallAvgIn,
+            line: {
+                color: '#1abc9c',
+                width: 3,
+                dash: 'solid'
+            }
+        });
+        annotations.push({
+            x: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y: overallAvgIn,
+            text: 'Середнє In: ' + overallAvgIn.toFixed(4),
+            showarrow: true,
+            arrowhead: 2,
+            arrowcolor: '#1abc9c',
+            ax: 0,
+            ay: 40,
+            bgcolor: 'rgba(26, 188, 156, 0.9)',
+            bordercolor: '#1abc9c',
             font: { color: 'white', size: 11, weight: 'bold' }
         });
         {% endif %}
@@ -1455,7 +1487,7 @@
             y: [overallAvgMarker],
             type: 'scatter',
             mode: 'markers',
-            name: 'Середнє (всі методики)',
+            name: 'Середнє Out (всі методики)',
             marker: {
                 color: '#667eea',
                 size: 15,
@@ -1466,6 +1498,28 @@
                 }
             },
             hovertemplate: '<b>Середнє з усіх методик</b><br>Значення: %{y:.4f}<br>Обчислено з: {{ average_from_methods.count }} методик<extra></extra>'
+        });
+        {% endif %}
+
+        // Загальне середнє значення In
+        {% if average_in_from_methods and average_in_from_methods.average is not none %}
+        var overallAvgInMarker = {{ average_in_from_methods.average|tojson }};
+        markerData.push({
+            x: [{{ timestamps|tojson }}[Math.floor({{ timestamps|length }} / 2)]],
+            y: [overallAvgInMarker],
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Середнє In (всі методики)',
+            marker: {
+                color: '#1abc9c',
+                size: 15,
+                symbol: 'star',
+                line: {
+                    color: 'white',
+                    width: 2
+                }
+            },
+            hovertemplate: '<b>Середнє In</b><br>Значення: %{y:.4f}<br>Обчислено з: {{ average_in_from_methods.count }} методик<extra></extra>'
         });
         {% endif %}
         
@@ -1731,7 +1785,7 @@
                     y: [overallAvg],
                     type: 'scatter',
                     mode: 'markers',
-                    name: 'Середнє (всі методики)',
+                    name: 'Середнє Out (всі методики)',
                     marker: {
                         color: '#667eea',
                         size: 12,
@@ -1739,6 +1793,26 @@
                     },
                     hovertemplate: '<b>Середнє з усіх методик</b><br>Значення: %{y:.4f}<br>Обчислено з: ' + 
                         data.average_from_methods.count + ' методик<extra></extra>'
+                });
+            }
+
+            // Додаємо маркер для середнього значення In
+            if (data.average_in_from_methods && data.average_in_from_methods.average !== null && lastTimestamp) {
+                const overallAvgIn = data.average_in_from_methods.average;
+                const midTimestamp = data.timestamps[Math.floor(data.timestamps.length / 2)];
+                chartData.push({
+                    x: [midTimestamp],
+                    y: [overallAvgIn],
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: 'Середнє In (всі методики)',
+                    marker: {
+                        color: '#1abc9c',
+                        size: 12,
+                        symbol: 'star'
+                    },
+                    hovertemplate: '<b>Середнє In</b><br>Значення: %{y:.4f}<br>Обчислено з: ' +
+                        data.average_in_from_methods.count + ' методик<extra></extra>'
                 });
             }
             
@@ -1772,7 +1846,7 @@
                 annotations.push({
                     x: lastTimestamp,
                     y: overallAvg,
-                    text: 'Середнє: ' + overallAvg.toFixed(4),
+                    text: 'Середнє Out: ' + overallAvg.toFixed(4),
                     showarrow: true,
                     arrowhead: 2,
                     arrowsize: 1,
@@ -1785,6 +1859,46 @@
                     borderwidth: 1,
                     font: {
                         color: '#667eea',
+                        size: 12
+                    }
+                });
+            }
+
+            // Додаємо лінію середнього значення In
+            if (data.average_in_from_methods && data.average_in_from_methods.average !== null && data.timestamps && data.timestamps.length > 0) {
+                const overallAvgIn = data.average_in_from_methods.average;
+                const firstTimestamp = data.timestamps[0];
+                const lastTimestamp = data.timestamps[data.timestamps.length - 1];
+
+                shapes.push({
+                    type: 'line',
+                    x0: firstTimestamp,
+                    x1: lastTimestamp,
+                    y0: overallAvgIn,
+                    y1: overallAvgIn,
+                    line: {
+                        color: '#1abc9c',
+                        width: 3,
+                        dash: 'solid'
+                    }
+                });
+
+                annotations.push({
+                    x: lastTimestamp,
+                    y: overallAvgIn,
+                    text: 'Середнє In: ' + overallAvgIn.toFixed(4),
+                    showarrow: true,
+                    arrowhead: 2,
+                    arrowsize: 1,
+                    arrowwidth: 2,
+                    arrowcolor: '#1abc9c',
+                    ax: 0,
+                    ay: 40,
+                    bgcolor: 'rgba(255,255,255,0.8)',
+                    bordercolor: '#1abc9c',
+                    borderwidth: 1,
+                    font: {
+                        color: '#1abc9c',
                         size: 12
                     }
                 });
