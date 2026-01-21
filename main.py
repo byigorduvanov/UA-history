@@ -256,6 +256,9 @@ async def analyze_spread(
                     "clustering": {"clusters": []},
                     "quantiles": {"median": None, "q1": None, "q3": None, "iqr": None}
                 },
+                "entry_in_level": None,
+                "exit_out_level": None,
+                "levels_debug": {"in": {"reason": "error"}, "out": {"reason": "error"}},
                 "average_from_methods": {
                     "average": None,
                     "count": 0,

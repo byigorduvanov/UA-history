@@ -4,9 +4,167 @@ from datetime import datetime
 from collections import Counter
 import numpy as np
 from scipy import stats
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, savgol_filter
 from sklearn.cluster import KMeans, DBSCAN
 from models.schemas import SpreadPoint, APIResponse
+
+
+def _odd_int(n: int) -> int:
+    """Повертає найближче непарне число <= n (мінімум 1)."""
+    n_int = int(n)
+    if n_int <= 1:
+        return 1
+    return n_int if (n_int % 2 == 1) else (n_int - 1)
+
+
+def _moving_average(values: np.ndarray, window: int) -> np.ndarray:
+    """Просте згладжування ковзним середнім."""
+    w = max(1, int(window))
+    if w == 1:
+        return values.copy()
+    kernel = np.ones(w, dtype=float) / float(w)
+    return np.convolve(values, kernel, mode="same")
+
+
+def _smooth_series(values: List[float]) -> Tuple[np.ndarray, Dict[str, Any]]:
+    """
+    Згладжує ряд для стабільнішого пошуку екстремумів.
+    Дефолт: Savitzky–Golay; fallback: moving average.
+    """
+    arr = np.array(values, dtype=float)
+    n = int(arr.size)
+    if n == 0:
+        return arr, {"method": "none", "reason": "empty"}
+
+    # Обробка NaN/inf (замінюємо лінійною інтерполяцією, якщо можливо)
+    finite_mask = np.isfinite(arr)
+    if not np.all(finite_mask):
+        finite_idx = np.where(finite_mask)[0]
+        if finite_idx.size >= 2:
+            arr_interp = arr.copy()
+            missing_idx = np.where(~finite_mask)[0]
+            arr_interp[missing_idx] = np.interp(missing_idx, finite_idx, arr[finite_idx])
+            arr = arr_interp
+        else:
+            # Якщо даних замало — підміняємо не-фінітні нулями
+            arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # Savitzky–Golay: window_length має бути непарним і > polyorder
+    polyorder = 3
+    # Евристика: ~5% ряду, але в межах [9, 101]
+    proposed = max(9, min(101, int(round(n * 0.05))))
+    window_length = _odd_int(proposed)
+    if window_length <= polyorder:
+        window_length = _odd_int(polyorder + 2)
+    if window_length > n:
+        window_length = _odd_int(n)
+    if window_length <= polyorder or window_length < 5:
+        # fallback на moving average
+        w = max(3, _odd_int(max(3, int(round(n * 0.03)))))
+        if w > n:
+            w = _odd_int(n)
+        smoothed = _moving_average(arr, w)
+        return smoothed, {"method": "moving_average", "window": int(w)}
+
+    try:
+        smoothed = savgol_filter(arr, window_length=window_length, polyorder=polyorder, mode="interp")
+        return smoothed, {"method": "savgol", "window_length": int(window_length), "polyorder": int(polyorder)}
+    except Exception as e:
+        w = max(3, _odd_int(max(3, int(round(n * 0.03)))))
+        if w > n:
+            w = _odd_int(n)
+        smoothed = _moving_average(arr, w)
+        return smoothed, {"method": "moving_average", "window": int(w), "fallback_reason": str(e)}
+
+
+def _compute_level_from_peaks(
+    values: List[float],
+    *,
+    quantile_among_peaks: float,
+    fallback_quantile: float,
+    top_k_cap: int = 30,
+) -> Tuple[float | None, Dict[str, Any]]:
+    """
+    Обчислює рівень за локальними максимумами:
+    - згладжує ряд
+    - знаходить піки на згладженому
+    - бере значення оригінального ряду в піках
+    - відбирає верхній хвіст (quantile_among_peaks) + cap top-K
+    - агрегує медіаною і кліпує по q01–q99 сирого ряду
+    """
+    debug: Dict[str, Any] = {}
+    n = int(len(values)) if values else 0
+    if n < 3:
+        return (float(values[-1]) if n > 0 else None), {"reason": "too_few_points", "n": n}
+
+    smoothed, smooth_dbg = _smooth_series(values)
+    debug["smoothing"] = smooth_dbg
+
+    # Евристики для find_peaks
+    # distance: щоб не брати сусідні шумові піки
+    distance = max(2, int(round(n / 50)))  # ~2% довжини
+    # prominence: робастно від розкиду
+    q25, q75 = np.percentile(smoothed, [25, 75])
+    iqr = float(q75 - q25)
+    std = float(np.std(smoothed))
+    prominence = max(1e-6, 0.15 * iqr, 0.10 * std)
+
+    peaks_idx, props = find_peaks(smoothed, distance=distance, prominence=prominence)
+    peaks_idx = peaks_idx.astype(int).tolist() if hasattr(peaks_idx, "astype") else list(peaks_idx)
+    debug["peaks"] = {
+        "count": int(len(peaks_idx)),
+        "distance": int(distance),
+        "prominence": float(prominence),
+    }
+
+    arr = np.array(values, dtype=float)
+    finite_mask = np.isfinite(arr)
+    if not np.all(finite_mask):
+        arr = np.nan_to_num(arr, nan=np.nan, posinf=np.nan, neginf=np.nan)
+
+    peak_values = [float(arr[i]) for i in peaks_idx if 0 <= i < n and np.isfinite(arr[i])]
+    debug["peak_values_count"] = int(len(peak_values))
+
+    if len(peak_values) >= 3:
+        thr = float(np.quantile(peak_values, quantile_among_peaks))
+        candidates = [v for v in peak_values if v >= thr]
+        # cap top-K за значенням
+        candidates_sorted = sorted(candidates, reverse=True)[: max(1, min(int(top_k_cap), len(candidates)))]
+        candidates = candidates_sorted
+        debug["candidate_selection"] = {
+            "quantile_among_peaks": float(quantile_among_peaks),
+            "threshold": float(thr),
+            "top_k_cap": int(top_k_cap),
+            "candidates_count": int(len(candidates)),
+        }
+    else:
+        candidates = []
+        debug["candidate_selection"] = {"reason": "insufficient_peaks", "needed": 3}
+
+    # fallback: квантиль по всьому ряду
+    if not candidates:
+        series_finite = arr[np.isfinite(arr)]
+        if series_finite.size == 0:
+            return None, {**debug, "fallback": {"reason": "no_finite_values"}}
+        level = float(np.quantile(series_finite, fallback_quantile))
+        debug["fallback"] = {"method": "series_quantile", "q": float(fallback_quantile), "value": float(level)}
+        return level, debug
+
+    level_raw = float(np.median(np.array(candidates, dtype=float)))
+    # кліп по q01–q99 сирого ряду
+    series_finite = arr[np.isfinite(arr)]
+    q01 = float(np.quantile(series_finite, 0.01)) if series_finite.size > 0 else level_raw
+    q99 = float(np.quantile(series_finite, 0.99)) if series_finite.size > 0 else level_raw
+    level = float(np.clip(level_raw, q01, q99))
+    debug["aggregation"] = {
+        "method": "median",
+        "level_raw": float(level_raw),
+        "clip_q01": float(q01),
+        "clip_q99": float(q99),
+        "level": float(level),
+    }
+    debug["candidates_sample"] = candidates[:10]
+    return level, debug
 
 
 def _format_dt(ts: int) -> str:
@@ -606,6 +764,9 @@ def prepare_chart_data(
             "lookback_checks": {"hours": [2, 4, 8, 16], "abs_thresholds": [0.5, 1.0], "windows": {}},
             "out_analysis": empty_analysis,
             "in_analysis": empty_analysis,
+            "entry_in_level": None,
+            "exit_out_level": None,
+            "levels_debug": {"in": {"reason": "no_data"}, "out": {"reason": "no_data"}},
             "average_from_methods": {
                 "average": None,
                 "count": 0,
@@ -750,6 +911,21 @@ def prepare_chart_data(
         average_in_from_methods = calculate_average_from_methods(in_analysis, enabled_methods)
 
     lookback_checks = compute_lookback_checks(sorted_spreads)
+
+    # Рівні входу/виходу (A+C): згладжування → піки → робастна агрегація
+    entry_in_level, entry_in_dbg = _compute_level_from_peaks(
+        in_values,
+        quantile_among_peaks=0.80,
+        fallback_quantile=0.90,
+        top_k_cap=30,
+    )
+    exit_out_level, exit_out_dbg = _compute_level_from_peaks(
+        out_values,
+        quantile_among_peaks=0.80,
+        fallback_quantile=0.80,
+        top_k_cap=30,
+    )
+    levels_debug = {"in": entry_in_dbg, "out": exit_out_dbg}
     
     return {
         "timestamps": timestamps,
@@ -763,6 +939,9 @@ def prepare_chart_data(
         "lookback_checks": lookback_checks,
         "out_analysis": out_analysis,
         "in_analysis": in_analysis,
+        "entry_in_level": entry_in_level,
+        "exit_out_level": exit_out_level,
+        "levels_debug": levels_debug,
         "average_from_methods": average_from_methods,
         "average_in_from_methods": average_in_from_methods,
         "simple_mean": simple_mean,

@@ -1362,6 +1362,66 @@
             font: { color: 'white', size: 11, weight: 'bold' }
         });
         {% endif %}
+
+        // Рівень входу по In (EntryIn) - червона лінія
+        {% if entry_in_level is not none %}
+        var entryInLevel = {{ entry_in_level|tojson }};
+        shapes.push({
+            type: 'line',
+            x0: {{ timestamps|tojson }}[0],
+            x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y0: entryInLevel,
+            y1: entryInLevel,
+            line: {
+                color: '#ff0000',
+                width: 4,
+                dash: 'solid'
+            }
+        });
+        annotations.push({
+            x: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y: entryInLevel,
+            text: 'Вхід In: ' + entryInLevel.toFixed(4),
+            showarrow: true,
+            arrowhead: 2,
+            arrowcolor: '#ff0000',
+            ax: 0,
+            ay: 60,
+            bgcolor: 'rgba(255, 0, 0, 0.85)',
+            bordercolor: '#ff0000',
+            font: { color: 'white', size: 11, weight: 'bold' }
+        });
+        {% endif %}
+
+        // Рівень виходу по Out (ExitOut) - чорна лінія
+        {% if exit_out_level is not none %}
+        var exitOutLevel = {{ exit_out_level|tojson }};
+        shapes.push({
+            type: 'line',
+            x0: {{ timestamps|tojson }}[0],
+            x1: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y0: exitOutLevel,
+            y1: exitOutLevel,
+            line: {
+                color: '#000000',
+                width: 4,
+                dash: 'solid'
+            }
+        });
+        annotations.push({
+            x: {{ timestamps|tojson }}[{{ timestamps|length - 1 }}],
+            y: exitOutLevel,
+            text: 'Вихід Out: ' + exitOutLevel.toFixed(4),
+            showarrow: true,
+            arrowhead: 2,
+            arrowcolor: '#000000',
+            ax: 0,
+            ay: -60,
+            bgcolor: 'rgba(0, 0, 0, 0.85)',
+            bordercolor: '#000000',
+            font: { color: 'white', size: 11, weight: 'bold' }
+        });
+        {% endif %}
         
         // Кластеризація - центри кластерів
         {% if out_analysis.clustering.clusters and out_analysis.clustering.clusters|length > 0 %}
@@ -1823,6 +1883,8 @@
         function createChartLayoutFromResponse(data) {
             var shapes = [];
             var annotations = [];
+            const firstTimestamp = (data.timestamps && data.timestamps.length > 0) ? data.timestamps[0] : null;
+            const lastTimestamp = (data.timestamps && data.timestamps.length > 0) ? data.timestamps[data.timestamps.length - 1] : null;
             
             // Додаємо лінію середнього значення
             if (data.average_from_methods && data.average_from_methods.average !== null && data.timestamps && data.timestamps.length > 0) {
@@ -1901,6 +1963,63 @@
                         color: '#1abc9c',
                         size: 12
                     }
+                });
+            }
+
+            // Рівні EntryIn / ExitOut (нові лінії)
+            if (data.entry_in_level !== null && data.entry_in_level !== undefined && firstTimestamp && lastTimestamp) {
+                const entryInLevel = data.entry_in_level;
+                shapes.push({
+                    type: 'line',
+                    x0: firstTimestamp,
+                    x1: lastTimestamp,
+                    y0: entryInLevel,
+                    y1: entryInLevel,
+                    line: { color: '#ff0000', width: 4, dash: 'solid' }
+                });
+                annotations.push({
+                    x: lastTimestamp,
+                    y: entryInLevel,
+                    text: 'Вхід In: ' + Number(entryInLevel).toFixed(4),
+                    showarrow: true,
+                    arrowhead: 2,
+                    arrowsize: 1,
+                    arrowwidth: 2,
+                    arrowcolor: '#ff0000',
+                    ax: 0,
+                    ay: 60,
+                    bgcolor: 'rgba(255, 0, 0, 0.85)',
+                    bordercolor: '#ff0000',
+                    borderwidth: 1,
+                    font: { color: 'white', size: 12 }
+                });
+            }
+
+            if (data.exit_out_level !== null && data.exit_out_level !== undefined && firstTimestamp && lastTimestamp) {
+                const exitOutLevel = data.exit_out_level;
+                shapes.push({
+                    type: 'line',
+                    x0: firstTimestamp,
+                    x1: lastTimestamp,
+                    y0: exitOutLevel,
+                    y1: exitOutLevel,
+                    line: { color: '#000000', width: 4, dash: 'solid' }
+                });
+                annotations.push({
+                    x: lastTimestamp,
+                    y: exitOutLevel,
+                    text: 'Вихід Out: ' + Number(exitOutLevel).toFixed(4),
+                    showarrow: true,
+                    arrowhead: 2,
+                    arrowsize: 1,
+                    arrowwidth: 2,
+                    arrowcolor: '#000000',
+                    ax: 0,
+                    ay: -60,
+                    bgcolor: 'rgba(0, 0, 0, 0.85)',
+                    bordercolor: '#000000',
+                    borderwidth: 1,
+                    font: { color: 'white', size: 12 }
                 });
             }
             
